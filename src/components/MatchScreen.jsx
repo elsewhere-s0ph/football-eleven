@@ -8,6 +8,8 @@ const MS_PER_MINUTE = { short: 800, normal: 3500, long: 4700 }
 const FULL_TIME = 93
 const QTE_SECONDS = 10
 const MAX_SUBS = 3
+/** Minuti effettivi di una partita (per statistiche e progressione). */
+const MATCH_MINUTES = 90
 /** Consumo stamina per minuto simulato, per ruolo. */
 const STAMINA_DECAY = { GK: 0.35, DF: 0.75, MF: 0.9, FW: 0.85 }
 /** Energia con cui entra un giocatore fresco. */
@@ -16,6 +18,7 @@ const FRESH_STAMINA = 97
 function eventClass(e) {
   if (e.type === 'goal') return 'border-teal-500/40 bg-teal-500/10 font-semibold text-teal-200'
   if (e.type === 'red') return 'border-red-500/40 bg-red-500/10 text-red-300'
+  if (e.type === 'injury') return 'border-red-500/30 bg-red-500/5 text-red-200/90'
   if (e.type === 'card') return 'border-amber-500/30 bg-amber-500/5 text-amber-200/80'
   return 'border-slate-800 bg-pitch-900/40 text-slate-300'
 }
@@ -57,31 +60,40 @@ export default function MatchScreen({ fixture, onDone }) {
     return m
   }, [players])
 
+  /** Solo chi non è infortunato per questa giornata scende in campo. */
+  const fitPlayersByClub = useMemo(() => {
+    const m = {}
+    for (const [cid, list] of Object.entries(playersByClub)) {
+      m[cid] = list.filter((p) => !(p.injuredUntil && fixture.number <= p.injuredUntil))
+    }
+    return m
+  }, [playersByClub, fixture])
+
   const match = useMemo(() => {
-    const seedNumber = matchSeedNumber(career.seed, fixture.key)
+    const seedNumber = matchSeedNumber(career.seed, fixture.key + '#' + career.season)
     const rng = new Rng(seedNumber)
-    const built = buildMatch(clubById[fixture.homeId], clubById[fixture.awayId], playersByClub, rng, {
+    const built = buildMatch(clubById[fixture.homeId], clubById[fixture.awayId], fitPlayersByClub, rng, {
       keyMoments: true,
       seedNumber,
       userClubId: career.clubId,
     })
     return { ...built, userIsHome: fixture.homeId === career.clubId, seedNumber }
-  }, [career, clubById, playersByClub, fixture])
+  }, [career, clubById, fitPlayersByClub, fixture])
 
   /** Rosa senior della squadra utente: XI titolare e panchina. */
   const userSquad = useMemo(
-    () => (playersByClub[career.clubId] || []).filter((p) => !p.youth),
-    [playersByClub, career],
+    () => (fitPlayersByClub[career.clubId] || []).filter((p) => !p.youth),
+    [fitPlayersByClub, career],
   )
   const xi = useMemo(() => bestXI(userSquad), [userSquad])
   const bench = useMemo(() => userSquad.filter((p) => !xi.some((t) => t.id === p.id)), [userSquad, xi])
 
   const [stamina, setStamina] = useState(() => Object.fromEntries(xi.map((p) => [p.id, 100])))
 
-  /** Chi è in campo al minuto corrente (cambi applicati). */
+  /** Chi è in campo al minuto corrente (cambi e infortuni applicati). */
   const onPitch = useMemo(() => {
     const outIds = new Set(subs.filter((s) => s.minute <= minute).map((s) => s.outId))
-    const inIds = new Set(subs.filter((s) => s.minute <= minute).map((s) => s.inId))
+    const inIds = new Set(subs.filter((s) => s.minute <= minute && s.inId).map((s) => s.inId))
     const list = xi.filter((p) => !outIds.has(p.id))
     for (const id of inIds) {
       const p = userSquad.find((x) => x.id === id)
@@ -142,6 +154,10 @@ export default function MatchScreen({ fixture, onDone }) {
     return set
   }, [match, resolved, userSquad])
 
+  const userSide = match.userIsHome ? 'home' : 'away'
+  const subsUsed = subs.filter((s) => s.inId).length
+  const subsLeft = MAX_SUBS - subsUsed
+
   // Avanzamento minuto per minuto, con pausa QTE sui momenti chiave.
   useEffect(() => {
     if (phase !== 'live') return
@@ -158,6 +174,40 @@ export default function MatchScreen({ fixture, onDone }) {
     const id = setTimeout(() => setMinute((m) => m + 1), MS_PER_MINUTE[career.settings.matchDuration] || 3500)
     return () => clearTimeout(id)
   }, [phase, minute, career, pendingMoment])
+
+  // Infortuni in campo: cambio obbligato se resta un cambio, altrimenti dieci uomini.
+  useEffect(() => {
+    if (phase !== 'live') return
+    const pending = match.baseEvents.find(
+      (e) =>
+        e.type === 'injury' && e.side === userSide && e.minute <= minute && !subs.some((s) => s.outId === e.playerId),
+    )
+    if (!pending) return
+    const outP = userSquad.find((p) => p.id === pending.playerId)
+    const onField = outP && onPitch.some((p) => p.id === outP.id)
+    const benchAvail = bench.filter((p) => !subs.some((s) => s.inId === p.id))
+    const inP =
+      onField && subsUsed < MAX_SUBS
+        ? benchAvail.filter((p) => outP && p.role === outP.role).sort((a, b) => b.ovr - a.ovr)[0] ||
+          benchAvail.slice().sort((a, b) => b.ovr - a.ovr)[0] ||
+          null
+        : null
+    const m = pending.minute
+    setSubs((s) => [...s, { minute: m, outId: pending.playerId, inId: inP ? inP.id : null, forced: true }])
+    if (inP) {
+      setStamina((st) => ({ ...st, [inP.id]: FRESH_STAMINA }))
+      setSubEvents((s) => [
+        ...s,
+        { minute: m, type: 'sub', sub: true, text: 'Cambio obbligato per infortunio: esce ' + outP.name + ', entra ' + inP.name },
+      ])
+    } else if (onField) {
+      setSubEvents((s) => [
+        ...s,
+        { minute: m, type: 'sub', sub: true, text: outP.name + ' non può continuare: cambi terminati, si resta in dieci' },
+      ])
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, minute, subs])
 
   // Countdown del QTE: allo scadere vince la prudenza.
   useEffect(() => {
@@ -196,9 +246,9 @@ export default function MatchScreen({ fixture, onDone }) {
 
   /** Effettua un cambio: annuncio in cronaca + eventuale impatto deterministico del fresco. */
   function makeSub() {
-    if (!pickOut || !pickIn || subs.length >= MAX_SUBS) return
+    if (!pickOut || !pickIn || subsUsed >= MAX_SUBS) return
     const m = Math.min(Math.max(1, minute), 92)
-    setSubs((s) => [...s, { minute: m, outId: pickOut.id, inId: pickIn.id }])
+    setSubs((s) => [...s, { minute: m, outId: pickOut.id, inId: pickIn.id, forced: false }])
     setStamina((s) => ({ ...s, [pickIn.id]: FRESH_STAMINA }))
     const evs = [
       { minute: m, type: 'sub', sub: true, text: 'Cambio: esce ' + pickOut.name + ', entra ' + pickIn.name },
@@ -211,18 +261,29 @@ export default function MatchScreen({ fixture, onDone }) {
     setSubsOpen(false)
   }
 
+  /** Minuti giocati: servono alle statistiche stagionali e alla progressione. */
+  const minutesPlayed = useMemo(() => {
+    const m = {}
+    for (const p of xi) m[p.id] = MATCH_MINUTES
+    for (const s of subs) {
+      if (m[s.outId] !== undefined) m[s.outId] = Math.min(m[s.outId], s.minute)
+      if (s.inId && m[s.inId] === undefined) m[s.inId] = MATCH_MINUTES - s.minute
+    }
+    return m
+  }, [xi, subs])
+
   const eventsVisible = phase === 'pre' ? [] : allEvents.filter((e) => e.minute <= minute)
   const hg = eventsVisible.filter((e) => e.type === 'goal' && e.side === 'home').length
   const ag = eventsVisible.filter((e) => e.type === 'goal' && e.side === 'away').length
   const home = clubById[fixture.homeId]
   const away = clubById[fixture.awayId]
-  const subsLeft = MAX_SUBS - subs.length
   const benchLeft = bench.filter((p) => !subs.some((s) => s.inId === p.id))
 
   const finalResult = {
     homeGoals: allEvents.filter((e) => e.type === 'goal' && e.side === 'home').length,
     awayGoals: allEvents.filter((e) => e.type === 'goal' && e.side === 'away').length,
     events: allEvents,
+    minutesPlayed,
   }
 
   return (
