@@ -21,6 +21,7 @@
  * il post-partita scrive quante giornate il giocatore resta fuori.
  */
 import { Rng } from '../lib/rng'
+import { hasAbility } from './abilities'
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v))
 
@@ -54,7 +55,13 @@ export function teamStrength(club, squad) {
   if (!seniors.length) return 40
   const base = seniors.reduce((s, p) => s + p.ovr, 0) / seniors.length
   const morale = seniors.reduce((s, p) => s + p.morale, 0) / seniors.length
-  return base * (0.92 + 0.08 * (morale / 100))
+  // Abilità (F5): il Capitano tiene su la squadra, il Fuoriclasse la solleva.
+  let lead = 0
+  for (const p of seniors) {
+    if (hasAbility(p, 'capitano')) lead += 1
+    if (hasAbility(p, 'fuoriclasse')) lead += 1.5
+  }
+  return base * (0.92 + 0.08 * (morale / 100)) + lead
 }
 
 /** Poisson (Knuth): gol attesi → gol segnati. */
@@ -83,7 +90,19 @@ function weightedPick(rng, items, weightFn) {
 const ROLE_GOAL_WEIGHT = { GK: 0.03, DF: 1, MF: 4, FW: 10 }
 
 function pickScorer(rng, squad) {
-  return weightedPick(rng, squad, (p) => ROLE_GOAL_WEIGHT[p.role] * (p.ovr / 70))
+  return weightedPick(rng, squad, (p) => {
+    let w = ROLE_GOAL_WEIGHT[p.role] * (p.ovr / 70)
+    if (hasAbility(p, 'bomber')) w *= 1.7
+    if (hasAbility(p, 'fuoriclasse')) w *= 2
+    return w
+  })
+}
+
+/** Chi serve il gol: Regista e Fuoriclasse pesano il doppio (F5). */
+function pickAssist(rng, squad) {
+  const makers = squad.filter((p) => hasAbility(p, 'regista') || hasAbility(p, 'fuoriclasse'))
+  if (makers.length && rng.chance(0.5)) return rng.pick(makers)
+  return pickScorer(rng, squad)
 }
 
 function pickByRole(rng, squad, role) {
@@ -123,7 +142,7 @@ export function buildMatch(homeClub, awayClub, playersByClubId, rng, { keyMoment
 
   const addGoal = (side, club, squad) => {
     const scorer = pickScorer(rng, squad)
-    const assist = rng.chance(0.45) ? pickScorer(rng, squad) : null
+    const assist = rng.chance(0.45) ? pickAssist(rng, squad) : null
     const assistTxt = assist && assist.id !== scorer.id ? ' su assist di ' + assist.name : ''
     events.push({
       minute: rng.int(2, 92),
@@ -246,7 +265,8 @@ export function subImpact(seedNumber, inPlayer, subMinute, squad) {
   const rng = outcomeRng(seedNumber, 'sub:' + inPlayer.id + ':' + subMinute)
   const at = Math.min(subMinute + rng.int(2, 15), 92)
   const roll = rng.float()
-  if (roll < 0.13) {
+  const goalP = hasAbility(inPlayer, 'bomber') || hasAbility(inPlayer, 'fuoriclasse') ? 0.18 : 0.13
+  if (roll < goalP) {
     return {
       minute: at,
       type: 'goal',
@@ -254,7 +274,7 @@ export function subImpact(seedNumber, inPlayer, subMinute, squad) {
       text: 'GOL! Appena entrato e già decisivo: ' + inPlayer.name + ' segna al primo pallone che tocca',
     }
   }
-  if (roll < 0.26) {
+  if (roll < goalP + 0.13) {
     const scorer = pickScorer(rng, squad.filter((p) => p.id !== inPlayer.id))
     return {
       minute: at,
@@ -284,11 +304,13 @@ function makeMoment(rng, kind, minute, idx, seedNumber, userClub, oppClub, userS
   }
 
   if (kind === 'penalty') {
-    const shooter = pickScorer(rng, userSquad)
+    const cold = userSquad.filter((p) => hasAbility(p, 'ghiaccio'))
+    const shooter = cold.length ? rng.pick(cold) : pickScorer(rng, userSquad)
+    const ice = hasAbility(shooter, 'ghiaccio') ? 0.15 : 0
     const defs = [
-      { id: 'incrocio', label: "Secco all'incrocio", hint: 'Freddo e cattivo', prudent: false, goalP: 0.72, postP: 0.1 },
-      { id: 'cucchiaio', label: 'Cucchiaio', hint: 'Fegato… o umiliazione', prudent: false, goalP: 0.76, postP: 0.02 },
-      { id: 'tiratore', label: 'Lascia decidere a lui', hint: 'La scelta prudente', prudent: true, goalP: 0.68, postP: 0.06 },
+      { id: 'incrocio', label: "Secco all'incrocio", hint: 'Freddo e cattivo', prudent: false, goalP: Math.min(0.95, 0.72 + ice), postP: 0.1 },
+      { id: 'cucchiaio', label: 'Cucchiaio', hint: 'Fegato… o umiliazione', prudent: false, goalP: Math.min(0.95, 0.76 + ice), postP: 0.02 },
+      { id: 'tiratore', label: 'Lascia decidere a lui', hint: 'La scelta prudente', prudent: true, goalP: Math.min(0.95, 0.68 + ice), postP: 0.06 },
     ]
     const options = defs.map((d) =>
       rollOutcome(d.id, (orng) => {
@@ -307,7 +329,7 @@ function makeMoment(rng, kind, minute, idx, seedNumber, userClub, oppClub, userS
       kind,
       side: 'for',
       minute,
-      prompt: 'RIGORE per il ' + userClub.name + '! Sul dischetto va ' + shooter.name + '. Come lo vuoi?',
+      prompt: 'RIGORE per il ' + userClub.name + '! Sul dischetto va ' + shooter.name + (ice ? ' — Ghiaccio nelle vene: per lui è una formalità' : '') + '. Come lo vuoi?',
       options,
     }
   }
@@ -361,12 +383,14 @@ function makeMoment(rng, kind, minute, idx, seedNumber, userClub, oppClub, userS
   }
 
   if (kind === 'counterFor') {
-    const carrier = pickScorer(rng, userSquad)
+    const sprinters = userSquad.filter((p) => hasAbility(p, 'falcata'))
+    const carrier = sprinters.length ? rng.pick(sprinters) : pickScorer(rng, userSquad)
+    const boost = hasAbility(carrier, 'falcata') ? 0.08 : 0
     const mate = pickMate(rng, userSquad, carrier.id)
     const defs = [
-      { id: 'verticalizza', label: 'Verticalizza subito', hint: 'Filtrante, senza pensare', prudent: false, goalP: 0.58, midP: 0.27, lostP: 0.15 },
-      { id: 'scatto', label: 'Protagonismo: il portatore scatta', hint: 'Va fino in fondo da solo', prudent: false, goalP: 0.5, midP: 0.32, lostP: 0.18 },
-      { id: 'smarcato', label: 'Prolunga per lo smarcato', hint: 'La scelta prudente', prudent: true, goalP: 0.54, midP: 0.36, lostP: 0.1 },
+      { id: 'verticalizza', label: 'Verticalizza subito', hint: 'Filtrante, senza pensare', prudent: false, goalP: 0.58 + boost, midP: 0.27, lostP: 0.15 },
+      { id: 'scatto', label: 'Protagonismo: il portatore scatta', hint: 'Va fino in fondo da solo', prudent: false, goalP: 0.5 + boost, midP: 0.32, lostP: 0.18 },
+      { id: 'smarcato', label: 'Prolunga per lo smarcato', hint: 'La scelta prudente', prudent: true, goalP: 0.54 + boost, midP: 0.36, lostP: 0.1 },
     ]
     const options = defs.map((d) =>
       rollOutcome(d.id, (orng) => {
@@ -404,18 +428,20 @@ function makeMoment(rng, kind, minute, idx, seedNumber, userClub, oppClub, userS
       kind,
       side: 'for',
       minute,
-      prompt: 'Palla recuperata alta: CONTROPIDE per il ' + userClub.name + ', tre contro due! Come la concludi?',
+      prompt: 'Palla recuperata alta: CONTROPIDE per il ' + userClub.name + ', tre contro due' + (boost ? ' — e ' + carrier.name + ' ha la Falcata' : '') + '! Come la concludi?',
       options,
     }
   }
 
   if (kind === 'freekick') {
-    const taker = pickByRole(rng, userSquad, 'MF')
+    const specialists = userSquad.filter((p) => hasAbility(p, 'specialista'))
+    const taker = specialists.length ? rng.pick(specialists) : pickByRole(rng, userSquad, 'MF')
+    const spec = hasAbility(taker, 'specialista') ? 0.18 : 0
     const header = pickByRole(rng, userSquad, 'FW')
     const defs = [
-      { id: 'diretto', label: "Tiro diretto all'angolino", hint: 'Colpo da campione… o da dilettante', prudent: false, goalP: 0.26, midP: 0.62, lostP: 0.12 },
-      { id: 'cross', label: 'Cross in area', hint: 'Palla alta per il colpo di testa', prudent: false, goalP: 0.2, midP: 0.72, lostP: 0.08 },
-      { id: 'corto', label: 'Batte corto e rigioca', hint: 'La scelta prudente', prudent: true, goalP: 0.1, midP: 0.78, lostP: 0.12 },
+      { id: 'diretto', label: "Tiro diretto all'angolino", hint: 'Colpo da campione… o da dilettante', prudent: false, goalP: 0.26 + spec, midP: 0.62, lostP: 0.12 },
+      { id: 'cross', label: 'Cross in area', hint: 'Palla alta per il colpo di testa', prudent: false, goalP: 0.2 + (spec ? 0.06 : 0), midP: 0.72, lostP: 0.08 },
+      { id: 'corto', label: 'Batte corto e rigioca', hint: 'La scelta prudente', prudent: true, goalP: 0.1 + (spec ? 0.04 : 0), midP: 0.78, lostP: 0.12 },
     ]
     const options = defs.map((d) =>
       rollOutcome(d.id, (orng) => {
@@ -453,12 +479,13 @@ function makeMoment(rng, kind, minute, idx, seedNumber, userClub, oppClub, userS
       kind,
       side: 'for',
       minute,
-      prompt: 'Punizione dal limite per il ' + userClub.name + '. Sulla palla ' + taker.name + ': come la vuoi?',
+      prompt: 'Punizione dal limite per il ' + userClub.name + '. Sulla palla ' + taker.name + (spec ? ', Specialista di punizioni' : '') + ': come la vuoi?',
       options,
     }
   }
 
   if (kind === 'counter') {
+    const wallCut = userSquad.some((p) => hasAbility(p, 'muro')) ? 0.08 : 0
     const defender = pickByRole(rng, userSquad, 'DF')
     const mid = pickByRole(rng, userSquad, 'MF')
     const oppScorer = pickScorer(rng, oppSquad)
@@ -485,7 +512,7 @@ function makeMoment(rng, kind, minute, idx, seedNumber, userClub, oppClub, userS
           }
         }
         if (d.id === 'tutti') {
-          const concede = roll < 0.36
+          const concede = roll < 0.36 - wallCut
           return {
             ...d,
             outcome: concede
@@ -496,7 +523,7 @@ function makeMoment(rng, kind, minute, idx, seedNumber, userClub, oppClub, userS
         if (roll < 0.32) {
           return { ...d, outcome: { goal: 0, goalAgainst: 0, card: false, text: mid.name + ' intercetta con piglio da mastino: che cuore, ripartenza!' } }
         }
-        if (roll < 0.87) {
+        if (roll < 0.87 - wallCut) {
           return { ...d, outcome: { goal: 0, goalAgainst: 1, card: false, playerId: oppScorer.id, text: 'Il pressing fallisce: passaggio filtrante e ' + oppScorer.name + ' insacchina. Beffa' } }
         }
         return { ...d, outcome: { goal: 0, goalAgainst: 0, card: false, text: 'Contrasto roccioso di ' + mid.name + ': rimessa laterale, si respira' } }
@@ -513,13 +540,14 @@ function makeMoment(rng, kind, minute, idx, seedNumber, userClub, oppClub, userS
   }
 
   if (kind === 'cornerAgainst') {
+    const wallFactor = userSquad.some((p) => hasAbility(p, 'muro')) ? 0.7 : 1
     const oppScorer = pickScorer(rng, oppSquad)
     const ourScorer = pickScorer(rng, userSquad)
     const keeper = pickByRole(rng, userSquad, 'GK')
     const defs = [
-      { id: 'muro', label: 'Tutti dietro, muro davanti alla porta', hint: 'La scelta prudente', prudent: true, concedeP: 0.09, penP: 0, counterGoalP: 0 },
-      { id: 'uscite', label: 'Uscite aggressive sugli incroci', hint: 'Il portiere va a prendere la palla', prudent: false, concedeP: 0.13, penP: 0.04, counterGoalP: 0 },
-      { id: 'riparti', label: 'Anticipa e riparti veloce', hint: 'Vinci il primo pallone e vai a chiuderla', prudent: false, concedeP: 0.1, penP: 0, counterGoalP: 0.16 },
+      { id: 'muro', label: 'Tutti dietro, muro davanti alla porta', hint: 'La scelta prudente', prudent: true, concedeP: 0.09 * wallFactor, penP: 0, counterGoalP: 0 },
+      { id: 'uscite', label: 'Uscite aggressive sugli incroci', hint: 'Il portiere va a prendere la palla', prudent: false, concedeP: 0.13 * wallFactor, penP: 0.04 * wallFactor, counterGoalP: 0 },
+      { id: 'riparti', label: 'Anticipa e riparti veloce', hint: 'Vinci il primo pallone e vai a chiuderla', prudent: false, concedeP: 0.1 * wallFactor, penP: 0, counterGoalP: 0.16 },
     ]
     const options = defs.map((d) =>
       rollOutcome(d.id, (orng) => {
@@ -553,12 +581,14 @@ function makeMoment(rng, kind, minute, idx, seedNumber, userClub, oppClub, userS
   }
 
   // corner (finale a favore)
-  const header = pickByRole(rng, userSquad, 'DF')
+  const falchi = userSquad.filter((p) => hasAbility(p, 'falco'))
+  const header = falchi.length ? rng.pick(falchi) : pickByRole(rng, userSquad, 'DF')
+  const hawk = hasAbility(header, 'falco') ? 0.12 : 0
   const oppScorer = pickScorer(rng, oppSquad)
   const defs = [
-    { id: 'tutti', label: 'Tutti in area, anche il portiere', hint: 'Il tutto per tutto', prudent: false, goalP: 0.32, counterP: 0.12 },
-    { id: 'mastini', label: 'Solo i mastini', hint: 'Equilibrio', prudent: true, goalP: 0.24, counterP: 0.06 },
-    { id: 'corto', label: 'Riparto corto', hint: 'Minimizza il rischio', prudent: false, goalP: 0.15, counterP: 0.02 },
+    { id: 'tutti', label: 'Tutti in area, anche il portiere', hint: 'Il tutto per tutto', prudent: false, goalP: 0.32 + hawk, counterP: 0.12 },
+    { id: 'mastini', label: 'Solo i mastini', hint: 'Equilibrio', prudent: true, goalP: 0.24 + hawk, counterP: 0.06 },
+    { id: 'corto', label: 'Riparto corto', hint: 'Minimizza il rischio', prudent: false, goalP: 0.15 + hawk, counterP: 0.02 },
   ]
   const options = defs.map((d) =>
     rollOutcome(d.id, (orng) => {
@@ -577,7 +607,7 @@ function makeMoment(rng, kind, minute, idx, seedNumber, userClub, oppClub, userS
     kind: 'corner',
     side: 'for',
     minute,
-    prompt: 'Ultima occasione: corner per il ' + userClub.name + " al " + minute + "'. Come lo approcci?",
+    prompt: 'Ultima occasione: corner per il ' + userClub.name + " al " + minute + (hawk ? " — e in area sale il Falco aereo " + header.name : "") + "'. Come lo approcci?",
     options,
   }
 }

@@ -9,6 +9,7 @@ import {
   COLOR_PAIRS, TRADE_NICKS, STADIUM_NAMES, FIXED_CLUBS,
 } from './names'
 import { FIELD_PROFILE, GK_PROFILE, deriveOvr } from './attributes'
+import { assignLeagueAbilities, abilityValueBonus } from './abilities'
 
 export const SEASON = 2026
 
@@ -196,6 +197,15 @@ export function generateUniverse(seedInput) {
     const seniors = squad.filter((p) => !p.youth)
     club.avgOvr = Math.round(seniors.reduce((s, p) => s + p.ovr, 0) / seniors.length)
   })
+
+  // Abilità speciali (F5): assegnate a tutta la lega dal seed, Fuoriclasse
+  // col tappo. E le abilità si pagano: valore e stipendio si aggiustano.
+  const abilityMap = assignLeagueAbilities(seed, players)
+  for (const p of players) {
+    p.abilities = abilityMap[p.id] || []
+    p.value = Math.max(30000, roundTo(p.value * (1 + abilityValueBonus(p.abilities)), 10000))
+    p.wage = Math.max(20000, roundTo(p.value / 80, 1000))
+  }
 
   return {
     seed,
