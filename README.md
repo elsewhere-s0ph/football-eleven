@@ -2,7 +2,7 @@
 
 Il football manager definitivo in formato PWA. Tutto client-side: nessun account, nessun server — la carriera vive sul tuo dispositivo.
 
-> Stato: Fase 0 — Fondazioni. Sviluppo attivo, repo privata.
+> Stato: Fase 1 — Generatori dell'universo fittizio.
 
 ## Sviluppo
 
@@ -10,6 +10,10 @@ Il football manager definitivo in formato PWA. Tutto client-side: nessun account
     npm run dev       # http://localhost:5173
     npm run build     # build di produzione in dist/
     npm run preview   # anteprima della build
+
+## Anteprima F1
+
+In locale: inserisci un seed (es. ELEVEN-CASA) e premi "Genera universo". Stesso seed → stesso universo, sempre: 20 club della Divisione d'Onore (8 con nome e storia a mano, 12 generati), 28 calciatori ciascuno (22 prima squadra + 6 Primavera), calendario andata/ritorno a 38 giornate.
 
 ## Stack
 
@@ -27,7 +31,7 @@ React · Vite · Tailwind CSS · Dexie (IndexedDB) · Zustand · PRNG con seed (
 ## Roadmap
 
 - [x] F0 — Fondazioni: scaffold, Dexie, PRNG, CI
-- [ ] F1 — Generatori dell'universo fittizio
+- [x] F1 — Generatori dell'universo fittizio
 - [ ] F2 — Data model & gestione (contratti, giovanili, morale, rapporti)
 - [ ] F3 — Motore partite live + QTE + sostituzioni
 - [ ] F4 — Mercato

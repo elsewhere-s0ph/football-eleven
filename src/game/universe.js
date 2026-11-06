@@ -1,0 +1,199 @@
+/**
+ * Generatore dell'universo fittizio (F1).
+ * Tutto deterministico dal seed: stesso seed → stesse squadre, stessi
+ * calciatori, stessi potenziali. Le carriere sono condivisibili come stringa.
+ */
+import { Rng, seedFromString } from '../lib/rng'
+import {
+  IT_FIRST, IT_LAST, FOREIGN_POOLS, TOPONYMS, CLUB_PATTERNS,
+  COLOR_PAIRS, TRADE_NICKS, STADIUM_NAMES, FIXED_CLUBS,
+} from './names'
+
+export const SEASON = 2026
+
+/* ---------------- Profili attributi (media, deviazione) ---------------- */
+
+const FIELD_PROFILE = {
+  DF: { pace: [66, 8], shooting: [45, 8], passing: [62, 7], dribbling: [55, 7], defending: [74, 7], physical: [72, 7] },
+  MF: { pace: [68, 8], shooting: [62, 8], passing: [75, 7], dribbling: [72, 7], defending: [58, 8], physical: [66, 7] },
+  FW: { pace: [76, 8], shooting: [74, 7], passing: [64, 7], dribbling: [76, 7], defending: [38, 6], physical: [64, 7] },
+}
+const GK_PROFILE = {
+  reflexes: [74, 6], diving: [73, 6], handling: [70, 6],
+  positioning: [71, 6], kicking: [66, 7], speed: [60, 7],
+}
+const OVR_WEIGHTS = {
+  GK: { reflexes: 0.3, diving: 0.25, handling: 0.2, positioning: 0.15, kicking: 0.1 },
+  DF: { defending: 0.3, physical: 0.2, pace: 0.15, passing: 0.15, dribbling: 0.1, shooting: 0.1 },
+  MF: { passing: 0.3, dribbling: 0.2, defending: 0.15, pace: 0.15, shooting: 0.1, physical: 0.1 },
+  FW: { shooting: 0.3, dribbling: 0.25, pace: 0.2, passing: 0.1, physical: 0.1, defending: 0.05 },
+}
+
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v))
+const roundTo = (v, step) => Math.round(v / step) * step
+
+/* ---------------- Nomi ---------------- */
+
+function playerName(rng) {
+  if (rng.chance(0.35)) {
+    const pool = rng.pick(FOREIGN_POOLS)
+    return rng.pick(pool.firsts) + ' ' + rng.pick(pool.lasts)
+  }
+  return rng.pick(IT_FIRST) + ' ' + rng.pick(IT_LAST)
+}
+
+/* ---------------- Club ---------------- */
+
+function colorPairByName(name) {
+  return COLOR_PAIRS.find((c) => c.name === name)
+}
+
+function buildGeneratedClubs(rng) {
+  const tops = rng.shuffle(TOPONYMS)
+  const patterns = rng.shuffle(CLUB_PATTERNS)
+  const colors = rng.shuffle(COLOR_PAIRS)
+  const nicks = rng.shuffle(TRADE_NICKS)
+
+  return tops.map((top, i) => {
+    const founded = rng.int(1899, 1946)
+    const withYear = i % 4 === 0
+    const name = patterns[i % patterns.length]
+      .replace('{T}', top)
+      .replace('{Y}', withYear ? ' ' + founded : '')
+    const stadiumName = rng.chance(0.5)
+      ? 'Stadio ' + rng.pick(STADIUM_NAMES)
+      : 'Stadio Comunale di ' + top
+    return {
+      name,
+      city: top,
+      founded,
+      nickname: nicks[i % nicks.length],
+      colors: colors[i % colors.length],
+      stadiumName,
+    }
+  })
+}
+
+function buildClubs(rng) {
+  const fixedColors = FIXED_CLUBS.map((c) => colorPairByName(c.colorPair))
+  const fixed = FIXED_CLUBS.map((c, i) => ({
+    name: c.name,
+    city: c.city,
+    founded: c.founded,
+    nickname: c.nickname,
+    colors: fixedColors[i],
+    stadiumName: c.stadiumName || ('Stadio ' + rng.pick(STADIUM_NAMES)),
+  }))
+  const raw = [...fixed, ...buildGeneratedClubs(rng)]
+
+  return raw.map((c, i) => {
+    // Tier per indice: 0-5 big, 6-11 medie, 12-19 piccole.
+    const tier = i < 6 ? 'big' : i < 12 ? 'mid' : 'small'
+    const reputation = tier === 'big' ? rng.int(88, 95) : tier === 'mid' ? rng.int(74, 83) : rng.int(62, 73)
+    const capacity = tier === 'big' ? rng.int(40000, 68000) : tier === 'mid' ? rng.int(22000, 38000) : rng.int(11000, 24000)
+    const budget = tier === 'big' ? rng.int(40, 90) * 1e6 : tier === 'mid' ? rng.int(15, 40) * 1e6 : rng.int(4, 15) * 1e6
+    return {
+      id: 'c' + String(i + 1).padStart(2, '0'),
+      ...c,
+      reputation,
+      stadium: { name: c.stadiumName, capacity: roundTo(capacity, 500) },
+      budget,
+      facilities: {
+        stadiumLevel: tier === 'big' ? rng.int(3, 5) : rng.int(2, 4),
+        youthLevel: tier === 'big' ? rng.int(3, 5) : rng.int(1, 4),
+        staffLevel: tier === 'big' ? rng.int(3, 5) : rng.int(1, 4),
+      },
+      tier,
+    }
+  })
+}
+
+/* ---------------- Calciatori ---------------- */
+
+function buildPlayer(club, rng, role, index) {
+  const youth = index.youth
+  const tierBonus = youth
+    ? rng.int(52, 64) - 68
+    : 44 + club.reputation * 0.4 + rng.int(-5, 5) - 68
+
+  let attributes = {}
+  if (role === 'GK') {
+    for (const [k, [m, s]] of Object.entries(GK_PROFILE)) {
+      attributes[k] = Math.round(clamp(rng.gauss(m + tierBonus, s), 20, 99))
+    }
+  } else {
+    for (const [k, [m, s]] of Object.entries(FIELD_PROFILE[role])) {
+      attributes[k] = Math.round(clamp(rng.gauss(m + tierBonus, s), 20, 99))
+    }
+  }
+
+  let ovr = 0
+  for (const [k, w] of Object.entries(OVR_WEIGHTS[role])) ovr += attributes[k] * w
+  ovr = Math.round(clamp(ovr, 30, 95))
+
+  const age = youth ? rng.int(16, 18) : Math.round(clamp(rng.gauss(25.5, 4.5), 17, 38))
+
+  const growth = age <= 19 ? rng.int(6, 24) : age <= 23 ? rng.int(4, 16) : age <= 27 ? rng.int(1, 8) : rng.int(0, 3)
+  const potential = clamp(ovr + growth + (youth ? rng.int(0, 4) : 0), ovr, 95)
+
+  const ageFactor = age <= 21 ? 1.3 : age <= 25 ? 1.15 : age <= 29 ? 1 : age <= 32 ? 0.7 : 0.45
+  const rawValue = Math.pow(1.17, ovr - 50) * 120000 * ageFactor * (1 + (potential - ovr) * 0.03)
+  const value = Math.max(30000, roundTo(rawValue, 10000))
+  const wage = Math.max(20000, roundTo(value / 80, 1000))
+
+  return {
+    id: 'p_' + club.id + '_' + index.n,
+    clubId: club.id,
+    name: playerName(rng),
+    role,
+    age,
+    foot: rng.chance(0.75) ? 'Destro' : 'Sinistro',
+    attributes,
+    ovr,
+    potential,
+    value,
+    wage,
+    contractUntil: SEASON + (age >= 33 ? rng.int(1, 2) : rng.int(1, 5)),
+    youth,
+  }
+}
+
+function buildSquad(club, rng, start) {
+  const composition = [
+    ['GK', 2], ['DF', 7], ['MF', 8], ['FW', 5],
+    ['GK', 1, true], ['DF', 2, true], ['MF', 2, true], ['FW', 1, true],
+  ]
+  const players = []
+  let n = 0
+  for (const [role, count, youth] of composition) {
+    for (let i = 0; i < count; i++) {
+      players.push(buildPlayer(club, rng, role, { n: start + n, youth: !!youth }))
+      n++
+    }
+  }
+  return players
+}
+
+/* ---------------- Punto d'ingresso ---------------- */
+
+export function generateUniverse(seedInput) {
+  const seed = typeof seedInput === 'string' ? seedFromString(seedInput) : seedInput >>> 0
+  const rng = new Rng(seed)
+
+  const clubs = buildClubs(rng)
+  const players = []
+  clubs.forEach((club, ci) => {
+    const squad = buildSquad(club, rng, ci * 40)
+    players.push(...squad)
+    const seniors = squad.filter((p) => !p.youth)
+    club.avgOvr = Math.round(seniors.reduce((s, p) => s + p.ovr, 0) / seniors.length)
+  })
+
+  return {
+    seed,
+    season: SEASON,
+    competition: 'Divisione d\'Onore',
+    clubs,
+    players,
+  }
+}
