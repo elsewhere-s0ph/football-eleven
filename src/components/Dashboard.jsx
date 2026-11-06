@@ -91,7 +91,7 @@ function LevelBar({ label, level }) {
       <span className="w-24 text-slate-400">{label}</span>
       <span className="flex gap-1">
         {[1, 2, 3, 4, 5].map((n) => (
-          <span key={n} className={'h-2 w-6 rounded ' + (n <= level ? 'bg-teal-500' : 'bg-slate-800')} />
+          <span key={n} className={'h-2 w-6 rounded ' + (n <= level ? 'bg-teal-500' : 'bg-pitch-800')} />
         ))}
       </span>
     </div>
@@ -100,8 +100,8 @@ function LevelBar({ label, level }) {
 
 function Card({ title, children }) {
   return (
-    <div className="rounded-xl border border-slate-800 bg-pitch-900/40 p-4">
-      <h3 className="mb-2 text-sm font-semibold">{title}</h3>
+    <div className="animate-fade-up rounded-xl border border-pitch-700/60 bg-pitch-900/50 p-4 shadow-[inset_0_1px_0_rgba(244,248,244,0.03)]">
+      <h3 className="scoreboard mb-2 text-xs font-semibold text-slate-400">{title}</h3>
       {children}
     </div>
   )
@@ -112,7 +112,7 @@ function Standings({ rows, userClubId }) {
     <div className="overflow-x-auto rounded-xl border border-slate-800 bg-pitch-900/40">
       <table className="w-full text-sm">
         <thead>
-          <tr className="text-left text-[10px] uppercase text-slate-500">
+          <tr className="text-left text-[10px] font-semibold uppercase tracking-widest text-slate-500">
             <th className="px-3 py-2">#</th>
             <th>Squadra</th>
             <th className="px-1 text-center">PG</th>
@@ -169,8 +169,9 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
 
   if (!career || !data) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-pitch-950 text-slate-300">
-        Caricamento…
+      <main className="flex min-h-screen flex-col items-center justify-center gap-2 bg-pitch-950">
+        <p className="scoreboard text-2xl text-flood-400">Pitchtory</p>
+        <p className="animate-urgent text-[10px] uppercase tracking-[0.35em] text-slate-500">Si entra in campo…</p>
       </main>
     )
   }
@@ -278,11 +279,12 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
 
   return (
     <main className="min-h-screen bg-pitch-950 pb-20 text-slate-100">
-      <header className="mx-auto max-w-5xl border-b border-slate-800/60 p-4 sm:p-8">
-        <div className="flex items-center justify-between gap-3">
+      <header className="relative overflow-hidden border-b border-pitch-700/50">
+        <div className="pointer-events-none absolute -top-20 left-1/2 h-44 w-[28rem] -translate-x-1/2 rounded-full bg-flood-400/10 blur-3xl" />
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 p-4 sm:p-8">
           <div>
-            <p className="text-xs uppercase tracking-[0.3em] text-teal-400">Pitchtory · Build your own legacy</p>
-            <h1 className="text-xl font-bold">{userClub.name}</h1>
+            <p className="scoreboard text-[10px] tracking-[0.35em] text-flood-400">Pitchtory · Build your own legacy</p>
+            <h1 className="scoreboard mt-1 text-2xl font-semibold">{userClub.name}</h1>
             <p className="text-xs text-slate-400">
               Divisione d'Onore · Stagione {career.season} · {career.coachName}
             </p>
@@ -309,7 +311,7 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
                     </p>
                     <button
                       onClick={() => setMatchFixture(next)}
-                      className="mt-3 w-full rounded-lg bg-teal-500 py-2 text-sm font-semibold text-pitch-950 hover:bg-teal-400"
+                      className="mt-3 w-full rounded-lg bg-teal-500 py-2 text-sm font-semibold text-pitch-950 shadow-[0_0_20px_rgba(47,181,110,0.25)] transition hover:bg-teal-400 hover:shadow-[0_0_28px_rgba(47,181,110,0.35)] active:scale-[0.98]"
                     >
                       Vai in campo
                     </button>
@@ -319,7 +321,7 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
                     <p className="text-slate-400">Stagione completata: 38 giornate su 38.</p>
                     <button
                       onClick={handleEndSeason}
-                      className="mt-3 w-full rounded-lg bg-teal-500 py-2 text-sm font-semibold text-pitch-950 hover:bg-teal-400"
+                      className="mt-3 w-full rounded-lg bg-teal-500 py-2 text-sm font-semibold text-pitch-950 shadow-[0_0_20px_rgba(47,181,110,0.25)] transition hover:bg-teal-400 hover:shadow-[0_0_28px_rgba(47,181,110,0.35)] active:scale-[0.98]"
                     >
                       Concludi la stagione
                     </button>
@@ -343,7 +345,7 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
         )}
 
         {tab === 'squad' && (
-          <div>
+          <div className="animate-fade-up">
             <SquadList list={seniors} season={career.season} round={round} onOpen={setCardPlayer} />
             <h3 className="mb-2 text-sm uppercase tracking-wider text-teal-400">Primavera</h3>
             <SquadList list={youth} season={career.season} round={round} onOpen={setCardPlayer} />
@@ -362,7 +364,7 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
         )}
 
         {tab === 'calendar' && (
-          <ul className="divide-y divide-slate-800/60 rounded-xl border border-slate-800">
+          <ul className="animate-fade-up divide-y divide-slate-800/60 rounded-xl border border-slate-800">
             {userFixtures.map((f) => {
               const home = f.homeId === userClub.id
               const opp = clubById[home ? f.awayId : f.homeId].name
@@ -384,7 +386,7 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
         )}
 
         {tab === 'club' && (
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid animate-fade-up gap-3 sm:grid-cols-2">
             <Card title="Finanze e strutture">
               <ul className="mb-3 space-y-1 text-sm text-slate-300">
                 <li>Budget trasferimenti: <b>{fmtMoney(userClub.budget)}</b></li>
@@ -456,7 +458,7 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
         )}
 
         {tab === 'settings' && (
-          <div className="max-w-xl space-y-6">
+          <div className="max-w-xl animate-fade-up space-y-6">
             <div>
               <h3 className="mb-2 text-sm font-semibold">Durata partita</h3>
               <select
@@ -495,14 +497,17 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
         )}
       </section>
 
-      <nav className="fixed inset-x-0 bottom-0 border-t border-slate-800 bg-pitch-900/95 backdrop-blur">
+      <nav className="fixed inset-x-0 bottom-0 border-t border-pitch-700/60 bg-pitch-900/95 backdrop-blur">
         <div className="mx-auto flex max-w-5xl">
           {TABS.map((t) => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={'flex-1 py-3 text-xs font-medium ' + (tab === t.id ? 'text-teal-400' : 'text-slate-500 hover:text-slate-300')}
+              className={'scoreboard relative flex-1 py-3 text-[11px] font-semibold transition ' + (tab === t.id ? 'text-flood-400' : 'text-slate-500 hover:text-slate-300')}
             >
+              {tab === t.id && (
+                <span className="absolute inset-x-4 top-0 h-0.5 rounded-full bg-flood-400/90" />
+              )}
               {t.label}
             </button>
           ))}
@@ -522,14 +527,14 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
 
       {seasonSummary && (
         <div className="fixed inset-0 z-20 overflow-y-auto bg-pitch-950 p-4 sm:p-8">
-          <div className="mx-auto max-w-md space-y-6">
+          <div className="mx-auto max-w-md animate-fade-up space-y-6">
             <p className="text-center text-xs uppercase tracking-[0.3em] text-teal-400">
               Fine stagione {seasonSummary.season}
             </p>
             <div className="space-y-1 text-center">
               {seasonSummary.userChampion ? (
                 <>
-                  <h2 className="text-2xl font-bold text-teal-300">Campioni! 🏆</h2>
+                  <h2 className="scoreboard animate-goal-flash inline-block rounded-lg px-3 text-2xl font-bold text-flood-300">Campioni! 🏆</h2>
                   <p className="text-sm text-slate-400">{userClub.name} vince la Divisione d'Onore.</p>
                 </>
               ) : (
@@ -571,7 +576,7 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
             </div>
             <button
               onClick={() => setSeasonSummary(null)}
-              className="w-full rounded-lg bg-teal-500 py-3 text-sm font-semibold text-pitch-950 hover:bg-teal-400"
+              className="w-full rounded-lg bg-teal-500 py-3 text-sm font-semibold text-pitch-950 shadow-[0_0_20px_rgba(47,181,110,0.25)] transition hover:bg-teal-400 hover:shadow-[0_0_28px_rgba(47,181,110,0.35)] active:scale-[0.98]"
             >
               Inizia la stagione {seasonSummary.season + 1}
             </button>
