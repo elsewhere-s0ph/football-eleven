@@ -1,3 +1,53 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-pitch-950 text-pitch-100 antialiased;
+  }
+  ::selection {
+    background: rgba(239, 191, 78, 0.3);
+  }
+}
+
+/* Grana leggera da notte di stadio: sopra tutto, mai in mezzo. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='0.6'/%3E%3C/svg%3E");
+}
+
+@layer utilities {
+  /* Separatore a linea di gesso, come i segni sul prato. */
+  .chalk-line {
+    @apply border-t border-dashed border-pitch-600/60;
+  }
+  /* Testo da tabellone: condensato, maiuscolo, spaziato. */
+  .scoreboard {
+    @apply font-display uppercase tracking-wider;
+  }
+}
+
+/* Scrollbar discreta, tono notte. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #1b3327 transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
