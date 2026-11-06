@@ -4,6 +4,7 @@ import { generateSchedule } from './game/schedule'
 import { computeStandings } from './game/standings'
 import { seasonGrowth } from './game/progression'
 import { deriveOvr, migrateAttrs, rollAttrsForOvr, growAttrs, declineAttrs } from './game/attributes'
+import { aiTransferDeals } from './game/market'
 import { Rng, seedFromString } from './lib/rng'
 
 const PERSONALITIES = ['Leader', 'Professionista', 'Temperamentale', 'Sognatore', 'Grintoso', 'Pacato']
@@ -12,7 +13,7 @@ const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v))
 /**
  * Database locale (IndexedDB via Dexie). Tutto client-side.
  * Una riga per club/calciatore/partita, indicizzata per careerId:
- * il mercato (F4) potrà interrogare l'intera lega senza caricare tutto.
+ * il mercato (F4) può interrogare l'intera lega senza caricare tutto.
  */
 export const db = new Dexie('pitchtory')
 
@@ -74,7 +75,7 @@ export async function createCareer({ seed, seedText, coachName, clubId, matchDur
 /**
  * Carica una carriera completa. Le righe conservano key e careerId.
  * Migrazione lazy (v0.9): chi non ha gli attributi in scala 1-20 li riceve
- * qui, deterministi dal seed e centrati sull'OVR attuale — la carriera
+ * qui, deterministici dal seed e centrati sull'OVR attuale — la carriera
  * continua identica a come l'hai lasciata.
  */
 export async function loadCareer(id) {
@@ -182,10 +183,38 @@ export async function applyAiMatchday(fixture, events, allPlayers) {
 }
 
 /**
+ * Trasferisce un giocatore tra due club (F4): budget aggiustato, contratto
+ * nuovo per chi arriva, media OVR ricalcolata per entrambe le squadre.
+ * Attenzione a non chiamarla con budget insufficienti: il mercato è già
+ * abbastanza crudele senza errori di contabilità.
+ */
+export async function transferPlayer(careerId, playerKey, fromClubKey, toClubKey, fee, contractUntil) {
+  await db.transaction('rw', db.players, db.clubs, async () => {
+    const [p, from, to] = await Promise.all([
+      db.players.get(playerKey),
+      db.clubs.get(fromClubKey),
+      db.clubs.get(toClubKey),
+    ])
+    if (!p || !from || !to) throw new Error('Trasferimento non valido')
+    if (to.budget < fee) throw new Error('Budget insufficiente')
+    await db.players.update(playerKey, { clubId: to.id, contractUntil })
+    await db.clubs.update(fromClubKey, { budget: from.budget + fee })
+    await db.clubs.update(toClubKey, { budget: to.budget - fee })
+    const all = await db.players.where('careerId').equals(careerId).toArray()
+    for (const club of [from, to]) {
+      const seniors = all.filter((x) => x.clubId === club.id && !x.youth)
+      const avg = seniors.length ? Math.round(seniors.reduce((s, x) => s + x.ovr, 0) / seniors.length) : club.avgOvr
+      await db.clubs.update(club.key, { avgOvr: avg })
+    }
+  })
+}
+
+/**
  * Chiude la stagione: assegna il titolo, fa crescere (o invecchiare) i
- * giocatori attributo per attributo, promuove i Primavera che compiono
- * 19 anni, azzera le statistiche, guarisce gli infortuni e genera il
- * calendario nuovo. Deterministica dal seed: stessa carriera, stesso futuro.
+ * giocatori attributo per attributo, lascia che la lega si rinforzi sul
+ * mercato, promuove i Primavera che compiono 19 anni, azzera le
+ * statistiche, guarisce gli infortuni e genera il calendario nuovo.
+ * Deterministica dal seed: stessa carriera, stesso futuro.
  * Ritorna il riepilogo per la schermata di fine stagione.
  */
 export async function endSeason(careerId) {
@@ -220,8 +249,8 @@ export async function endSeason(careerId) {
     })
   }
 
-  // NB: clubs serve dentro la transazione (media OVR): ometterlo dallo
-  // scope fa fallire tutta la transazione su Dexie.
+  // NB: clubs serve dentro la transazione (media OVR e budget): ometterlo
+  // dallo scope fa fallire tutta la transazione su Dexie.
   await db.transaction('rw', db.careers, db.clubs, db.players, db.fixtures, async () => {
     for (const p of players) {
       const club = clubById[p.clubId]
@@ -259,6 +288,24 @@ export async function endSeason(careerId) {
       p.ovr = ovr
       p.attributes = attributes
       if (p.key) await db.players.update(p.key, updates)
+    }
+
+    // Il mercato estivo della lega: anche i club AI si rinforzano, tra loro.
+    const byClubNow = {}
+    for (const p of players) (byClubNow[p.clubId] = byClubNow[p.clubId] || []).push(p)
+    const aiClubs = clubs.filter((c) => c.id !== career.clubId)
+    const budgets = Object.fromEntries(clubs.map((c) => [c.id, c.budget]))
+    for (const deal of aiTransferDeals(career.seed, career.season, aiClubs, byClubNow)) {
+      if ((budgets[deal.toId] || 0) < deal.fee) continue
+      const p = players.find((x) => x.key === deal.playerKey)
+      if (!p || !p.key || p.clubId !== deal.fromId) continue
+      budgets[deal.fromId] += deal.fee
+      budgets[deal.toId] -= deal.fee
+      p.clubId = deal.toId
+      await db.players.update(p.key, { clubId: deal.toId, contractUntil: deal.contractUntil })
+    }
+    for (const c of clubs) {
+      if (c.budget !== budgets[c.id] && c.key) await db.clubs.update(c.key, { budget: budgets[c.id] })
     }
 
     // Media OVR aggiornata per ogni club (i Primavera promossi a 19 anni
