@@ -5,6 +5,7 @@ import { scoutedPotential } from '../game/scouting'
 import { computeStandings } from '../game/standings'
 import { simulateMatch, matchSeed } from '../game/engine'
 import MatchScreen from './MatchScreen'
+import PlayerCard from './PlayerCard'
 import pkg from '../../package.json'
 
 const ROLE_LABELS = { GK: 'Portieri', DF: 'Difensori', MF: 'Centrocampisti', FW: 'Attaccanti' }
@@ -30,12 +31,18 @@ function MoraleDot({ value }) {
 }
 
 /** Colonne a larghezza fissa: ogni riga allineata con le altre. */
-function PlayerRow({ p, season, round }) {
+function PlayerRow({ p, season, round, onOpen }) {
   const injured = p.injuredUntil && round <= p.injuredUntil
   return (
     <li className="flex items-center gap-2 px-3 py-2 text-sm">
       <span className="w-7 shrink-0 text-center font-bold text-teal-400">{p.ovr}</span>
-      <span className="min-w-0 flex-1 truncate">{p.name}</span>
+      <button
+        onClick={() => onOpen(p)}
+        title="Apri la scheda giocatore"
+        className="min-w-0 flex-1 truncate text-left hover:text-teal-300"
+      >
+        {p.name}
+      </button>
       <span className="flex w-14 shrink-0 items-center justify-end gap-1.5">
         <MoraleDot value={p.morale} />
         <span className="text-xs text-slate-400">{p.morale}</span>
@@ -58,7 +65,7 @@ function PlayerRow({ p, season, round }) {
   )
 }
 
-function SquadList({ list, season, round }) {
+function SquadList({ list, season, round, onOpen }) {
   return ROLE_ORDER.map((role) => {
     const rows = list.filter((p) => p.role === role).sort((a, b) => b.ovr - a.ovr)
     if (!rows.length) return null
@@ -66,7 +73,7 @@ function SquadList({ list, season, round }) {
       <div key={role} className="mb-3">
         <h4 className="mb-1 text-xs uppercase tracking-wider text-slate-400">{ROLE_LABELS[role]}</h4>
         <ul className="divide-y divide-slate-800/60 rounded-xl border border-slate-800 bg-pitch-900/40">
-          {rows.map((p) => <PlayerRow key={p.id} p={p} season={season} round={round} />)}
+          {rows.map((p) => <PlayerRow key={p.id} p={p} season={season} round={round} onOpen={onOpen} />)}
         </ul>
       </div>
     )
@@ -135,6 +142,7 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
   const [tab, setTab] = useState('home')
   const [matchFixture, setMatchFixture] = useState(null)
   const [seasonSummary, setSeasonSummary] = useState(null)
+  const [cardPlayer, setCardPlayer] = useState(null)
 
   useEffect(() => {
     load(careerId)
@@ -322,9 +330,9 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
 
         {tab === 'squad' && (
           <div>
-            <SquadList list={seniors} season={career.season} round={round} />
+            <SquadList list={seniors} season={career.season} round={round} onOpen={setCardPlayer} />
             <h3 className="mb-2 text-sm uppercase tracking-wider text-teal-400">Primavera</h3>
-            <SquadList list={youth} season={career.season} round={round} />
+            <SquadList list={youth} season={career.season} round={round} onOpen={setCardPlayer} />
           </div>
         )}
 
@@ -369,7 +377,12 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
                 {youthRanked.map((p) => (
                   <li key={p.id} className="flex items-center gap-2 text-sm">
                     <span className="w-7 shrink-0 text-center font-bold text-teal-400">{p.ovr}</span>
-                    <span className="min-w-0 flex-1 truncate">{p.name}</span>
+                    <button
+                      onClick={() => setCardPlayer(p)}
+                      className="min-w-0 flex-1 truncate text-left hover:text-teal-300"
+                    >
+                      {p.name}
+                    </button>
                     <span className="w-8 shrink-0 text-right text-xs text-slate-400">{p.age}a</span>
                     <span
                       className="w-14 shrink-0 text-right text-xs text-teal-400"
@@ -440,6 +453,15 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
           ))}
         </div>
       </nav>
+
+      {cardPlayer && (
+        <PlayerCard
+          player={cardPlayer}
+          staffLevel={staffLevel}
+          round={round}
+          onClose={() => setCardPlayer(null)}
+        />
+      )}
 
       {matchFixture && <MatchScreen fixture={matchFixture} onDone={handleMatchEnd} />}
 
