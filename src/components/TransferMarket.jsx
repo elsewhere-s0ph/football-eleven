@@ -363,7 +363,7 @@ export default function TransferMarket({ career, userClub, clubs, players, next,
                           onClick={() => completeBuy(response.fee)}
                           disabled={busy}
                           className="w-full rounded-xl bg-teal-400 px-3 py-2.5 text-sm font-bold text-pitch-950 disabled:opacity-40"
-                        >{'Completa l'acquisto · ' + fmtMoney(response.fee)}</button>
+                        >Completa l'acquisto · {fmtMoney(response.fee)}</button>
                       </div>
                     ) : null}
 
