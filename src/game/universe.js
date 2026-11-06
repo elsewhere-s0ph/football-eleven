@@ -32,6 +32,13 @@ const OVR_WEIGHTS = {
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v))
 const roundTo = (v, step) => Math.round(v / step) * step
 
+/** Valore di mercato: esponenziale sull'OVR, scontato con l'età, premiato dal potenziale. */
+export function playerValue(ovr, age, potential) {
+  const ageFactor = age <= 21 ? 1.3 : age <= 25 ? 1.15 : age <= 29 ? 1 : age <= 32 ? 0.7 : 0.45
+  const rawValue = Math.pow(1.17, ovr - 50) * 120000 * ageFactor * (1 + Math.max(0, potential - ovr) * 0.03)
+  return Math.max(30000, roundTo(rawValue, 10000))
+}
+
 /* ---------------- Nomi ---------------- */
 
 function playerName(rng) {
@@ -157,9 +164,7 @@ function buildPlayer(club, rng, role, index) {
   const growth = youth ? youthGrowth(rng) : seniorGrowth(rng, age)
   const potential = clamp(ovr + growth, ovr, 95)
 
-  const ageFactor = age <= 21 ? 1.3 : age <= 25 ? 1.15 : age <= 29 ? 1 : age <= 32 ? 0.7 : 0.45
-  const rawValue = Math.pow(1.17, ovr - 50) * 120000 * ageFactor * (1 + (potential - ovr) * 0.03)
-  const value = Math.max(30000, roundTo(rawValue, 10000))
+  const value = playerValue(ovr, age, potential)
   const wage = Math.max(20000, roundTo(value / 80, 1000))
 
   return {

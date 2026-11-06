@@ -1,7 +1,8 @@
 /**
  * Motore partita (F3). I gol seguono una distribuzione di Poisson guidata
  * dalla differenza di forza tra le squadre (miglior XI + morale + fattore casa).
- * Deterministico dal seed della partita.
+ * Deterministico dal seed della partita. I chiamanti filtrano gli infortunati
+ * prima di passare le rose.
  *
  * Momenti chiave (QTE): nelle partite dell'utente si generano 1-2 momenti
  * decisivi scelti da un pool di 7 (rigore, uno contro uno col portiere,
@@ -14,6 +15,10 @@
  * Sostituzioni: la UI live chiama subImpact() quando entra un fresco.
  * L'impatto (gol, assist, occasione o nulla) è deterministico da
  * (seed partita, giocatore, minuto del cambio): niente reroll.
+ *
+ * Infortuni: probabilità bassa per squadra, gravità nel seed. La UI li
+ * traduce in cambio obbligato (o in dieci uomini se i cambi sono finiti);
+ * il post-partita scrive quante giornate il giocatore resta fuori.
  */
 import { Rng } from '../lib/rng'
 
@@ -134,7 +139,6 @@ export function buildMatch(homeClub, awayClub, playersByClubId, rng, { keyMoment
   const missCount = rng.int(2, 5)
   for (let i = 0; i < missCount; i++) {
     const side = rng.chance(0.5) ? 'home' : 'away'
-    const club = side === 'home' ? homeClub : awayClub
     const squad = side === 'home' ? homeSquad : awaySquad
     const attacker = pickScorer(rng, squad)
     const variant = rng.int(0, 2)
@@ -159,6 +163,25 @@ export function buildMatch(homeClub, awayClub, playersByClubId, rng, { keyMoment
     const squad = side === 'home' ? homeSquad : awaySquad
     const player = rng.pick(squad)
     events.push({ minute: rng.int(25, 90), side, type: 'red', playerId: player.id, text: 'ESPULSO: ' + player.name + '!' })
+  }
+
+  // Infortuni in partita: probabilità bassa per squadra, gravità variabile.
+  // Tutto nel seed: stessa partita, stessi infortuni.
+  for (const side of ['home', 'away']) {
+    if (rng.chance(0.16)) {
+      const squad = side === 'home' ? homeSquad : awaySquad
+      if (!squad.length) continue
+      const player = rng.pick(squad)
+      const weeks = rng.chance(0.7) ? rng.int(1, 2) : rng.int(3, 5)
+      events.push({
+        minute: rng.int(5, 88),
+        side,
+        type: 'injury',
+        playerId: player.id,
+        weeks,
+        text: 'Infortunio: ' + player.name + ' si accascia senza contatto ed esce zoppicando. Circa ' + weeks + ' giornate fuori',
+      })
+    }
   }
 
   const moments = []
@@ -228,7 +251,7 @@ export function subImpact(seedNumber, inPlayer, subMinute, squad) {
       minute: at,
       type: 'goal',
       playerId: inPlayer.id,
-      text: 'GOL! Appena entrato e già decisivo: ' + inPlayer.name + ' insacchina il pallone della sveglia',
+      text: 'GOL! Appena entrato e già decisivo: ' + inPlayer.name + ' segna al primo pallone che tocca',
     }
   }
   if (roll < 0.26) {
@@ -237,7 +260,7 @@ export function subImpact(seedNumber, inPlayer, subMinute, squad) {
       minute: at,
       type: 'goal',
       playerId: scorer.id,
-      text: 'GOL! ' + scorer.name + ' trafora la difesa su lancio del freschissimo ' + inPlayer.name,
+      text: 'GOL! ' + scorer.name + ' buca la difesa su lancio del freschissimo ' + inPlayer.name,
     }
   }
   if (roll < 0.38) {
@@ -305,7 +328,7 @@ function makeMoment(rng, kind, minute, idx, seedNumber, userClub, oppClub, userS
             return { ...d, outcome: { goal: 1, goalAgainst: 0, card: false, playerId: mate.id, text: 'GOL! ' + striker.name + ' serve il parallelo perfetto e ' + mate.name + ' insacchina a porta vuota' } }
           }
           if (d.id === 'scarta') {
-            return { ...d, outcome: { goal: 1, goalAgainst: 0, card: false, playerId: striker.id, text: 'GOL! ' + striker.name + ' scarta il portiere e deposita in rete con calma olimpica' } }
+            return { ...d, outcome: { goal: 1, goalAgainst: 0, card: false, playerId: striker.id, text: 'GOL! ' + striker.name + ' scarta il portiere e la deposita in rete con calma olimpica' } }
           }
           return { ...d, outcome: { goal: 1, goalAgainst: 0, card: false, playerId: striker.id, text: 'GOL! ' + striker.name + ' conclude di prima e beffa il portiere sul primo palo' } }
         }
@@ -390,7 +413,7 @@ function makeMoment(rng, kind, minute, idx, seedNumber, userClub, oppClub, userS
     const taker = pickByRole(rng, userSquad, 'MF')
     const header = pickByRole(rng, userSquad, 'FW')
     const defs = [
-      { id: 'diretto', label: "Tiro diretto all'angolino", hint: 'Il colpo del campione… o del bulo', prudent: false, goalP: 0.26, midP: 0.62, lostP: 0.12 },
+      { id: 'diretto', label: "Tiro diretto all'angolino", hint: 'Colpo da campione… o da dilettante', prudent: false, goalP: 0.26, midP: 0.62, lostP: 0.12 },
       { id: 'cross', label: 'Cross in area', hint: 'Palla alta per il colpo di testa', prudent: false, goalP: 0.2, midP: 0.72, lostP: 0.08 },
       { id: 'corto', label: 'Batte corto e rigioca', hint: 'La scelta prudente', prudent: true, goalP: 0.1, midP: 0.78, lostP: 0.12 },
     ]
@@ -400,7 +423,7 @@ function makeMoment(rng, kind, minute, idx, seedNumber, userClub, oppClub, userS
         if (roll < d.goalP) {
           const txt =
             d.id === 'diretto'
-              ? "GOL! " + taker.name + " piega la barriera e la mette nell'angolino: assist alla lavagna"
+              ? "GOL! " + taker.name + " piega la barriera e la mette all'angolino, come disegnato in lavagna"
               : d.id === 'cross'
                 ? 'GOL! Cross perfetto di ' + taker.name + ' e incornata chirurgica di ' + header.name
                 : "GOL! Giocata a due e stoccata: " + taker.name + " riceve indietro e infila l'angolino dal limite"
@@ -466,7 +489,7 @@ function makeMoment(rng, kind, minute, idx, seedNumber, userClub, oppClub, userS
           return {
             ...d,
             outcome: concede
-              ? { goal: 0, goalAgainst: 1, card: false, playerId: oppScorer.id, text: 'Il 3 contro 2 diventa 3 contro 1: ' + oppScorer.name + ' non sbaglia. Dolissimo' }
+              ? { goal: 0, goalAgainst: 1, card: false, playerId: oppScorer.id, text: 'Il 3 contro 2 diventa 3 contro 1: ' + oppScorer.name + ' non sbaglia. Dolore' }
               : { goal: 0, goalAgainst: 0, card: false, text: 'Difesa compatta: il contropiede muore tra le linee' },
           }
         }
