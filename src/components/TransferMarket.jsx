@@ -1,0 +1,438 @@
+import { useMemo, useState } from 'react'
+import { askingPrice, respondToOffer, aiBidFor, boughtContract } from '../game/market'
+import { transferPlayer } from '../db'
+
+const ROLES = ['Tutti', 'GK', 'DF', 'MF', 'FW']
+const ROLE_BADGE = { GK: 'P', DF: 'D', MF: 'C', FW: 'A' }
+const SORTS = [
+  { id: 'ovr', label: 'OVR' },
+  { id: 'price', label: 'Prezzo' },
+  { id: 'age', label: 'Età' },
+]
+
+function fmtMoney(v) {
+  if (v >= 1000000) {
+    const m = v / 1000000
+    const s = m % 1 === 0 ? String(m) : m.toFixed(1).replace('.', ',')
+    return '€' + s + 'M'
+  }
+  return '€' + Math.round(v / 1000) + 'k'
+}
+
+function ovrClass(ovr) {
+  if (ovr >= 80) return 'bg-teal-400/15 text-teal-300'
+  if (ovr >= 70) return 'bg-pitch-700 text-pitch-100'
+  return 'bg-pitch-800 text-pitch-300'
+}
+
+function Pill({ children, tone }) {
+  const cls = tone === 'red' ? 'bg-red-500/10 text-red-300' : 'bg-pitch-800 text-pitch-300'
+  return <span className={'rounded px-1.5 py-0.5 text-[10px] font-semibold ' + cls}>{children}</span>
+}
+
+function MarketRow({ p, club, asking, injured, onOpen }) {
+  return (
+    <li className="border-b border-pitch-800/60 last:border-0">
+      <button onClick={onOpen} className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-pitch-800/50">
+        <span className={'w-8 shrink-0 rounded py-0.5 text-center text-xs font-bold ' + ovrClass(p.ovr)}>{p.ovr}</span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm text-pitch-100">{p.name}</span>
+          <span className="block truncate text-[10px] text-pitch-400">{club ? club.name : ''}</span>
+        </span>
+        {injured ? <Pill tone="red">Infort.</Pill> : null}
+        <Pill>{ROLE_BADGE[p.role] || p.role}</Pill>
+        <span className="w-7 text-right text-xs text-pitch-300">{p.age}a</span>
+        <span className="w-14 text-right text-xs font-semibold text-teal-300">{fmtMoney(asking)}</span>
+      </button>
+    </li>
+  )
+}
+
+function SellRow({ p, onOpen, disabled }) {
+  return (
+    <li className="border-b border-pitch-800/60 last:border-0">
+      <button onClick={onOpen} disabled={disabled} className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-pitch-800/50 disabled:opacity-50">
+        <span className={'w-8 shrink-0 rounded py-0.5 text-center text-xs font-bold ' + ovrClass(p.ovr)}>{p.ovr}</span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm text-pitch-100">{p.name}</span>
+          <span className="block text-[10px] text-pitch-400">{"Valore " + fmtMoney(p.value)}</span>
+        </span>
+        <Pill>{ROLE_BADGE[p.role] || p.role}</Pill>
+        <span className="w-7 text-right text-xs text-pitch-300">{p.age}a</span>
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-teal-300">Vendi</span>
+      </button>
+    </li>
+  )
+}
+
+export default function TransferMarket({ career, userClub, clubs, players, next, onDone }) {
+  const [mode, setMode] = useState('buy')
+  const [role, setRole] = useState('Tutti')
+  const [sort, setSort] = useState('ovr')
+  const [query, setQuery] = useState('')
+  const [sheet, setSheet] = useState(null)
+  const [offerInput, setOfferInput] = useState('')
+  const [response, setResponse] = useState(null)
+  const [bid, setBid] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [notice, setNotice] = useState(null)
+
+  const clubById = useMemo(() => Object.fromEntries(clubs.map((c) => [c.id, c])), [clubs])
+  const playersByClub = useMemo(() => {
+    const m = {}
+    for (const p of players) (m[p.clubId] = m[p.clubId] || []).push(p)
+    return m
+  }, [players])
+  const seniorsByClub = useMemo(() => {
+    const m = {}
+    for (const entry of Object.entries(playersByClub)) m[entry[0]] = entry[1].filter((p) => !p.youth).length
+    return m
+  }, [playersByClub])
+  const askingById = useMemo(() => {
+    const m = {}
+    for (const p of players) {
+      if (p.youth || p.clubId === userClub.id) continue
+      m[p.id] = askingPrice(p, playersByClub[p.clubId] || [], career.season)
+    }
+    return m
+  }, [players, playersByClub, career.season, userClub.id])
+
+  const userSeniors = seniorsByClub[userClub.id] || 0
+  const marketWindow = next ? (next.number === 1 ? 'estivo' : next.number === 20 ? 'invernale' : null) : null
+  const currentRound = next ? next.number : 39
+  const isBuyDisabled = userSeniors >= 30
+  const isSellDisabled = userSeniors <= 16
+
+  const buyList = useMemo(() => {
+    let list = players.filter((p) => p.clubId !== userClub.id && !p.youth)
+    if (role !== 'Tutti') list = list.filter((p) => p.role === role)
+    const q = query.trim().toLowerCase()
+    if (q) list = list.filter((p) => p.name.toLowerCase().includes(q))
+    const keyOf = (p) => (sort === 'ovr' ? p.ovr : sort === 'price' ? askingById[p.id] || 0 : -p.age)
+    return list.slice().sort((a, b) => keyOf(b) - keyOf(a)).slice(0, 60)
+  }, [players, userClub.id, role, query, sort, askingById])
+
+  const sellList = useMemo(
+    () => players.filter((p) => p.clubId === userClub.id && !p.youth).slice().sort((a, b) => b.ovr - a.ovr),
+    [players, userClub.id],
+  )
+
+  function closeSheet() {
+    setSheet(null)
+    setResponse(null)
+    setBid(null)
+    setOfferInput('')
+  }
+
+  function openBuy(p) {
+    setMode('buy')
+    setSheet(p)
+    setOfferInput(String(askingById[p.id] || 0))
+    setResponse(null)
+    setBid(null)
+  }
+
+  function openSell(p) {
+    setMode('sell')
+    setSheet(p)
+    setBid(null)
+    setResponse(null)
+  }
+
+  function propose() {
+    if (!sheet) return
+    const offer = Math.round(parseInt(offerInput, 10) || 0)
+    const asking = askingById[sheet.id] || 0
+    setResponse(respondToOffer(offer, asking, seniorsByClub[sheet.clubId] || 0))
+  }
+
+  async function completeBuy(fee) {
+    if (!sheet || busy) return
+    setBusy(true)
+    try {
+      const contractUntil = boughtContract(career.seed, career.season, sheet)
+      await transferPlayer(career.id, sheet.key, clubById[sheet.clubId].key, userClub.key, fee, contractUntil)
+      setNotice({ ok: true, text: 'Acquisto chiuso: ' + sheet.name + ' per ' + fmtMoney(fee) + '.' })
+      closeSheet()
+      await onDone()
+    } catch (err) {
+      setResponse({ status: 'rejected', message: 'Non se ne fa nulla: ' + (err && err.message ? err.message : 'errore') })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function askBid() {
+    if (!sheet) return
+    const buyerClubs = clubs.filter((c) => c.id !== userClub.id)
+    const b = aiBidFor(career.seed, career.season, sheet, buyerClubs, playersByClub)
+    setBid(b || 'none')
+  }
+
+  async function acceptBid() {
+    if (!sheet || !bid || bid === 'none' || busy) return
+    setBusy(true)
+    try {
+      await transferPlayer(career.id, sheet.key, userClub.key, bid.club.key, bid.fee, boughtContract(career.seed, career.season, sheet))
+      setNotice({ ok: true, text: sheet.name + ' lascia il club: ' + fmtMoney(bid.fee) + ' da ' + bid.club.name + '.' })
+      closeSheet()
+      await onDone()
+    } catch (err) {
+      setNotice({ ok: false, text: 'Vendita fallita: ' + (err && err.message ? err.message : 'errore') })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const sheetClub = sheet ? clubById[sheet.clubId] : null
+  const offerValue = Math.round(parseInt(offerInput, 10) || 0)
+  const overBudget = offerValue > userClub.budget
+
+  if (!marketWindow) {
+    return (
+      <div className="mx-auto max-w-md space-y-3">
+        <div className="rounded-2xl border border-pitch-700 bg-pitch-900 p-6 text-center">
+          <p className="text-lg font-bold text-pitch-100">Mercato chiuso</p>
+          <p className="mt-2 text-sm leading-relaxed text-pitch-400">
+            Si riapre in estate, prima della giornata 1, e d'inverno, tra la 19ª e la 20ª.
+            Il calcio ai liquori si beve solo a finestre aperte.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="mx-auto max-w-md space-y-3">
+      {notice ? (
+        <div className={'flex items-start justify-between gap-2 rounded-xl border p-3 text-sm ' + (notice.ok ? 'border-teal-400/30 bg-teal-400/10 text-teal-200' : 'border-red-400/30 bg-red-400/10 text-red-200')}>
+          <span>{notice.text}</span>
+          <button onClick={() => setNotice(null)} className="shrink-0 text-pitch-400 hover:text-pitch-200">✕</button>
+        </div>
+      ) : null}
+
+      <div className="rounded-2xl border border-teal-400/30 bg-teal-400/5 p-3">
+        <p className="text-sm font-semibold text-teal-200">
+          Mercato {marketWindow} aperto: si chiude giocando la giornata {next.number}.
+        </p>
+        <p className="mt-1 text-xs text-pitch-300">
+          Budget: <span className="font-semibold text-teal-300">{fmtMoney(userClub.budget)}</span>
+          {' · '}Rosa: {userSeniors}/30 senior
+        </p>
+      </div>
+
+      <div className="flex gap-2">
+        <button
+          onClick={() => setMode('buy')}
+          className={'flex-1 rounded-xl border px-3 py-2 text-sm font-semibold ' + (mode === 'buy' ? 'border-teal-400/50 bg-teal-400/10 text-teal-200' : 'border-pitch-700 bg-pitch-900 text-pitch-300')}
+        >Compra</button>
+        <button
+          onClick={() => setMode('sell')}
+          className={'flex-1 rounded-xl border px-3 py-2 text-sm font-semibold ' + (mode === 'sell' ? 'border-teal-400/50 bg-teal-400/10 text-teal-200' : 'border-pitch-700 bg-pitch-900 text-pitch-300')}
+        >Vendi</button>
+      </div>
+
+      {mode === 'buy' ? (
+        <>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {ROLES.map((r) => (
+              <button
+                key={r}
+                onClick={() => setRole(r)}
+                className={'rounded-lg px-2.5 py-1 text-xs font-semibold ' + (role === r ? 'bg-teal-400/15 text-teal-200' : 'bg-pitch-800 text-pitch-400')}
+              >{r === 'Tutti' ? 'Tutti' : ROLE_BADGE[r]}</button>
+            ))}
+            <span className="flex-1" />
+            {SORTS.map((s) => (
+              <button
+                key={s.id}
+                onClick={() => setSort(s.id)}
+                className={'rounded-lg px-2.5 py-1 text-xs ' + (sort === s.id ? 'bg-pitch-700 text-pitch-100' : 'bg-pitch-800 text-pitch-400')}
+              >{s.label}</button>
+            ))}
+          </div>
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Cerca un nome..."
+            className="w-full rounded-xl border border-pitch-700 bg-pitch-900 px-3 py-2 text-sm text-pitch-100 placeholder:text-pitch-500"
+          />
+          {isBuyDisabled ? (
+            <p className="rounded-xl border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-200">
+              Rosa completa: 30 senior. Prima di comprare, vendi qualcuno.
+            </p>
+          ) : null}
+          <ul className="overflow-hidden rounded-2xl border border-pitch-700 bg-pitch-900">
+            {buyList.map((p) => (
+              <MarketRow
+                key={p.id}
+                p={p}
+                club={clubById[p.clubId]}
+                asking={askingById[p.id] || 0}
+                injured={!!p.injuredUntil && p.injuredUntil >= currentRound}
+                onOpen={() => openBuy(p)}
+              />
+            ))}
+            {buyList.length === 0 ? (
+              <li className="p-4 text-center text-sm text-pitch-400">Nessun giocatore con questi filtri.</li>
+            ) : null}
+          </ul>
+          <p className="text-center text-[10px] text-pitch-500">Prime 60 richieste per ordinamento. La Primavera non si tocca: cresce in silenzio.</p>
+        </>
+      ) : (
+        <>
+          {isSellDisabled ? (
+            <p className="rounded-xl border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-200">
+              Rosa al limite: 16 senior esatti. Vendi solo dopo aver rafforzato.
+            </p>
+          ) : null}
+          <ul className="overflow-hidden rounded-2xl border border-pitch-700 bg-pitch-900">
+            {sellList.map((p) => (
+              <SellRow key={p.id} p={p} onOpen={() => openSell(p)} disabled={isSellDisabled} />
+            ))}
+          </ul>
+          <p className="text-center text-[10px] text-pitch-500">Le offerte arrivano dai club AI a cui manca proprio quel ruolo. Niente regali.</p>
+        </>
+      )}
+
+      {sheet ? (
+        <div className="fixed inset-0 z-30 flex items-end justify-center bg-pitch-950/80 p-3 sm:items-center" onClick={closeSheet}>
+          <div className="w-full max-w-md space-y-3 rounded-2xl border border-pitch-700 bg-pitch-900 p-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="truncate text-base font-bold text-pitch-100">{sheet.name}</p>
+                <p className="text-xs text-pitch-400">{sheetClub ? sheetClub.name : userClub.name}</p>
+              </div>
+              <button onClick={closeSheet} className="text-pitch-400 hover:text-pitch-200">✕</button>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="rounded-xl bg-pitch-800 py-2">
+                <p className="text-[10px] uppercase tracking-wide text-pitch-400">Ruolo</p>
+                <p className="text-sm font-bold text-pitch-100">{ROLE_BADGE[sheet.role] || sheet.role}</p>
+              </div>
+              <div className="rounded-xl bg-pitch-800 py-2">
+                <p className="text-[10px] uppercase tracking-wide text-pitch-400">Età</p>
+                <p className="text-sm font-bold text-pitch-100">{sheet.age}</p>
+              </div>
+              <div className="rounded-xl bg-pitch-800 py-2">
+                <p className="text-[10px] uppercase tracking-wide text-pitch-400">OVR</p>
+                <p className="text-sm font-bold text-teal-300">{sheet.ovr}</p>
+              </div>
+            </div>
+
+            {mode === 'buy' ? (
+              <div className="space-y-3">
+                <p className="text-sm text-pitch-300">
+                  Prezzo richiesto: <span className="font-bold text-teal-300">{fmtMoney(askingById[sheet.id] || 0)}</span>
+                  {' · '}Stipendio: {fmtMoney(sheet.wage || 0)}/stagione
+                </p>
+                {isBuyDisabled ? (
+                  <p className="rounded-xl border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-200">
+                    Rosa completa: prima di comprare, vendi.
+                  </p>
+                ) : (
+                  <>
+                    <label className="block text-xs text-pitch-400">La tua offerta (€)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="10000"
+                      value={offerInput}
+                      onChange={(e) => { setOfferInput(e.target.value); setResponse(null) }}
+                      className="w-full rounded-xl border border-pitch-700 bg-pitch-950 px-3 py-2 text-sm text-pitch-100"
+                    />
+                    {overBudget ? (
+                      <p className="text-xs text-red-300">Sfori il budget: hai {fmtMoney(userClub.budget)}.</p>
+                    ) : null}
+
+                    {!response ? (
+                      <button
+                        onClick={propose}
+                        disabled={busy || offerValue <= 0 || overBudget}
+                        className="w-full rounded-xl bg-teal-400 px-3 py-2.5 text-sm font-bold text-pitch-950 disabled:opacity-40"
+                      >Proponi l'offerta</button>
+                    ) : null}
+
+                    {response && response.status === 'accepted' ? (
+                      <div className="space-y-2">
+                        <p className="rounded-xl border border-teal-400/30 bg-teal-400/10 p-3 text-sm text-teal-200">
+                          Accettata: stringono la mano, ora paga.
+                        </p>
+                        <button
+                          onClick={() => completeBuy(response.fee)}
+                          disabled={busy}
+                          className="w-full rounded-xl bg-teal-400 px-3 py-2.5 text-sm font-bold text-pitch-950 disabled:opacity-40"
+                        >{'Completa l'acquisto · ' + fmtMoney(response.fee)}</button>
+                      </div>
+                    ) : null}
+
+                    {response && response.status === 'counter' ? (
+                      <div className="space-y-2">
+                        <p className="rounded-xl border border-pitch-600 bg-pitch-800 p-3 text-sm text-pitch-200">
+                          {'Non si muove di un centesimo: ' + fmtMoney(response.counter) + ' e non se ne parla.'}
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => completeBuy(response.counter)}
+                            disabled={busy || response.counter > userClub.budget}
+                            className="flex-1 rounded-xl bg-teal-400 px-3 py-2.5 text-sm font-bold text-pitch-950 disabled:opacity-40"
+                          >{'Paga ' + fmtMoney(response.counter)}</button>
+                          <button onClick={closeSheet} className="flex-1 rounded-xl border border-pitch-700 px-3 py-2.5 text-sm font-semibold text-pitch-300">Ritirati</button>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {response && response.status === 'rejected' ? (
+                      <p className="rounded-xl border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-200">
+                        {response.message} Puoi rilanciare, se il portafoglio regge.
+                      </p>
+                    ) : null}
+                  </>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-sm text-pitch-300">
+                  Valore di mercato: <span className="font-bold text-teal-300">{fmtMoney(sheet.value)}</span>
+                </p>
+                {isSellDisabled ? (
+                  <p className="rounded-xl border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-200">
+                    Rosa al limite: 16 senior. Vendi solo dopo aver comprato.
+                  </p>
+                ) : !bid ? (
+                  <button
+                    onClick={askBid}
+                    disabled={busy}
+                    className="w-full rounded-xl bg-teal-400 px-3 py-2.5 text-sm font-bold text-pitch-950 disabled:opacity-40"
+                  >Chiedi offerte al mercato</button>
+                ) : bid === 'none' ? (
+                  <div className="space-y-2">
+                    <p className="rounded-xl border border-pitch-600 bg-pitch-800 p-3 text-sm text-pitch-200">
+                      Nessuno interessato: o non serve a nessuno, o i budget della lega sono polvere.
+                    </p>
+                    <button onClick={closeSheet} className="w-full rounded-xl border border-pitch-700 px-3 py-2.5 text-sm font-semibold text-pitch-300">Chiudi</button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="rounded-xl border border-teal-400/30 bg-teal-400/10 p-3 text-sm text-teal-200">
+                      {bid.club.name + ' offre ' + fmtMoney(bid.fee) + '.'}
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={acceptBid}
+                        disabled={busy}
+                        className="flex-1 rounded-xl bg-teal-400 px-3 py-2.5 text-sm font-bold text-pitch-950 disabled:opacity-40"
+                      >Accetta l'offerta</button>
+                      <button onClick={() => setBid(null)} className="flex-1 rounded-xl border border-pitch-700 px-3 py-2.5 text-sm font-semibold text-pitch-300">Declina</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
+}
