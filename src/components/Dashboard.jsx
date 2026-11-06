@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useCareer } from '../store'
-import { deleteCareer, exportCareer, importCareer, listCareers, saveFixtureResults, applyPostMatch, updateCareerSettings } from '../db'
+import { deleteCareer, exportCareer, importCareer, listCareers, saveFixtureResults, applyPostMatch, applyAiMatchday, endSeason, updateCareerSettings } from '../db'
 import { scoutedPotential } from '../game/scouting'
 import { computeStandings } from '../game/standings'
 import { simulateMatch, matchSeed } from '../game/engine'
@@ -30,7 +30,8 @@ function MoraleDot({ value }) {
 }
 
 /** Colonne a larghezza fissa: ogni riga allineata con le altre. */
-function PlayerRow({ p, season }) {
+function PlayerRow({ p, season, round }) {
+  const injured = p.injuredUntil && round <= p.injuredUntil
   return (
     <li className="flex items-center gap-2 px-3 py-2 text-sm">
       <span className="w-7 shrink-0 text-center font-bold text-teal-400">{p.ovr}</span>
@@ -39,19 +40,25 @@ function PlayerRow({ p, season }) {
         <MoraleDot value={p.morale} />
         <span className="text-xs text-slate-400">{p.morale}</span>
       </span>
+      <span className="w-7 shrink-0 text-right text-xs text-slate-400" title="Presenze">{p.apps || 0}</span>
+      <span className="w-6 shrink-0 text-right text-xs text-slate-400" title="Gol">{p.goals || 0}</span>
       <span className="hidden w-24 shrink-0 truncate text-xs text-slate-400 sm:block">{p.personality}</span>
       <span className="w-8 shrink-0 text-right text-xs text-slate-400">{p.age}a</span>
       <span className="w-16 shrink-0 text-right text-xs text-slate-400">{fmtMoney(p.value)}</span>
       <span className="w-12 shrink-0 text-right">
-        {p.contractUntil <= season + 1 && (
+        {injured ? (
+          <span className="rounded bg-red-500/20 px-1.5 py-0.5 text-[10px] text-red-400" title={'Fuori fino alla giornata ' + p.injuredUntil}>
+            Infort.
+          </span>
+        ) : p.contractUntil <= season + 1 ? (
           <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] text-amber-400">Scade</span>
-        )}
+        ) : null}
       </span>
     </li>
   )
 }
 
-function SquadList({ list, season }) {
+function SquadList({ list, season, round }) {
   return ROLE_ORDER.map((role) => {
     const rows = list.filter((p) => p.role === role).sort((a, b) => b.ovr - a.ovr)
     if (!rows.length) return null
@@ -59,7 +66,7 @@ function SquadList({ list, season }) {
       <div key={role} className="mb-3">
         <h4 className="mb-1 text-xs uppercase tracking-wider text-slate-400">{ROLE_LABELS[role]}</h4>
         <ul className="divide-y divide-slate-800/60 rounded-xl border border-slate-800 bg-pitch-900/40">
-          {rows.map((p) => <PlayerRow key={p.id} p={p} season={season} />)}
+          {rows.map((p) => <PlayerRow key={p.id} p={p} season={season} round={round} />)}
         </ul>
       </div>
     )
@@ -127,6 +134,7 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
   const { career, clubs, players, fixtures, load, refresh } = useCareer()
   const [tab, setTab] = useState('home')
   const [matchFixture, setMatchFixture] = useState(null)
+  const [seasonSummary, setSeasonSummary] = useState(null)
 
   useEffect(() => {
     load(careerId)
@@ -160,27 +168,50 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
   const avgMorale = squad.length ? Math.round(squad.reduce((s, p) => s + p.morale, 0) / squad.length) : 0
   const wageBill = squad.reduce((s, p) => s + p.wage, 0)
   const next = userFixtures.find((f) => !f.played)
+  const round = next ? next.number : 39
+  const injuredCount = squad.filter((p) => p.injuredUntil && round <= p.injuredUntil).length
   const staffLevel = userClub.facilities.staffLevel
   const youthRanked = youth
     .slice()
     .sort((a, b) => scoutedPotential(b, staffLevel) - scoutedPotential(a, staffLevel))
   const position = standings.findIndex((r) => r.clubId === userClub.id) + 1
 
+  /** Solo i giocatori sani per la giornata indicata. */
+  function fitPlayersFor(md) {
+    const m = {}
+    for (const [cid, list] of Object.entries(playersByClub)) {
+      m[cid] = list.filter((p) => !(p.injuredUntil && md <= p.injuredUntil))
+    }
+    return m
+  }
+
   async function handleMatchEnd(result) {
     const fixture = matchFixture
     if (!fixture) return
     const others = fixtures.filter((f) => f.number === fixture.number && f.key !== fixture.key && !f.played)
     const simResults = others.map((f) => {
-      const sim = simulateMatch(clubById[f.homeId], clubById[f.awayId], playersByClub, matchSeed(career.seed, f.key))
-      return { key: f.key, homeGoals: sim.homeGoals, awayGoals: sim.awayGoals }
+      const sim = simulateMatch(
+        clubById[f.homeId],
+        clubById[f.awayId],
+        fitPlayersFor(f.number),
+        matchSeed(career.seed, f.key + '#' + career.season),
+      )
+      return { f, sim }
     })
     await saveFixtureResults([
       { key: fixture.key, homeGoals: result.homeGoals, awayGoals: result.awayGoals },
-      ...simResults,
+      ...simResults.map((r) => ({ key: r.f.key, homeGoals: r.sim.homeGoals, awayGoals: r.sim.awayGoals })),
     ])
-    await applyPostMatch(career.id, fixture, result, userClub.id, squad)
+    await applyPostMatch(career.id, fixture, result, userClub.id, squad, players)
+    for (const r of simResults) await applyAiMatchday(r.f, r.sim.events, players)
     setMatchFixture(null)
     await load(career.id)
+  }
+
+  async function handleEndSeason() {
+    const summary = await endSeason(career.id)
+    await load(career.id)
+    setSeasonSummary(summary)
   }
 
   async function handleExport() {
@@ -253,7 +284,15 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
                     </button>
                   </div>
                 ) : (
-                  <p className="text-sm text-slate-400">Stagione completata.</p>
+                  <div className="text-sm">
+                    <p className="text-slate-400">Stagione completata: 38 giornate su 38.</p>
+                    <button
+                      onClick={handleEndSeason}
+                      className="mt-3 w-full rounded-lg bg-teal-500 py-2 text-sm font-semibold text-pitch-950 hover:bg-teal-400"
+                    >
+                      Concludi la stagione
+                    </button>
+                  </div>
                 )}
               </Card>
               <Card title="Situazione">
@@ -261,8 +300,9 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
                   <li>Posizione: <b>{position ? position + '° su ' + standings.length : '—'}</b></li>
                   <li>Media squadra: <b>{userClub.avgOvr}</b></li>
                   <li>Morale rosa: <b>{avgMorale}</b></li>
+                  <li>Infortunati: <b className={injuredCount ? 'text-red-400' : ''}>{injuredCount}</b></li>
                   <li>Budget: <b>{fmtMoney(userClub.budget)}</b></li>
-                  <li>Stipendi: <b>{fmtMoney(wageBill)}</b>/anno</li>
+                  <li>Stipendi: <b>{fmtMoney(wageBill)}</b></li>
                 </ul>
               </Card>
             </div>
@@ -273,9 +313,9 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
 
         {tab === 'squad' && (
           <div>
-            <SquadList list={seniors} season={career.season} />
+            <SquadList list={seniors} season={career.season} round={round} />
             <h3 className="mb-2 text-sm uppercase tracking-wider text-teal-400">Primavera</h3>
-            <SquadList list={youth} season={career.season} />
+            <SquadList list={youth} season={career.season} round={round} />
           </div>
         )}
 
@@ -306,7 +346,7 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
             <Card title="Finanze e strutture">
               <ul className="mb-3 space-y-1 text-sm text-slate-300">
                 <li>Budget trasferimenti: <b>{fmtMoney(userClub.budget)}</b></li>
-                <li>Stipendi rosa: <b>{fmtMoney(wageBill)}</b>/anno</li>
+                <li>Stipendi rosa: <b>{fmtMoney(wageBill)}</b></li>
                 <li>Stadio: <b>{userClub.stadium.name}</b> ({userClub.stadium.capacity.toLocaleString('it-IT')} posti)</li>
               </ul>
               <div className="space-y-1.5">
@@ -393,6 +433,65 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
       </nav>
 
       {matchFixture && <MatchScreen fixture={matchFixture} onDone={handleMatchEnd} />}
+
+      {seasonSummary && (
+        <div className="fixed inset-0 z-20 overflow-y-auto bg-pitch-950 p-4 sm:p-8">
+          <div className="mx-auto max-w-md space-y-6">
+            <p className="text-center text-xs uppercase tracking-[0.3em] text-teal-400">
+              Fine stagione {seasonSummary.season}
+            </p>
+            <div className="space-y-1 text-center">
+              {seasonSummary.userChampion ? (
+                <>
+                  <h2 className="text-2xl font-bold text-teal-300">Campioni! 🏆</h2>
+                  <p className="text-sm text-slate-400">{userClub.name} vince la Divisione d'Onore.</p>
+                </>
+              ) : (
+                <>
+                  <h2 className="text-2xl font-bold">Campione: {seasonSummary.champion}</h2>
+                  <p className="text-sm text-slate-400">{seasonSummary.userPosition}° posto per il {userClub.name}.</p>
+                </>
+              )}
+            </div>
+            <div className="rounded-xl border border-slate-800 bg-pitch-900/40 p-4">
+              <h3 className="mb-2 text-sm font-semibold text-teal-400">Chi è cresciuto</h3>
+              <ul className="space-y-1 text-sm">
+                {seasonSummary.progressed.slice(0, 8).map((x, i) => (
+                  <li key={i} className="flex justify-between gap-2">
+                    <span className="min-w-0 flex-1 truncate">
+                      {x.name}{x.youth ? ' (Primavera)' : ''}
+                    </span>
+                    <span className="tabular-nums text-teal-300">{x.from} → {x.to}</span>
+                  </li>
+                ))}
+                {!seasonSummary.progressed.length && (
+                  <li className="text-slate-500">Nessuno. Il campo insegna solo a chi lo calca, mister.</li>
+                )}
+              </ul>
+            </div>
+            <div className="rounded-xl border border-slate-800 bg-pitch-900/40 p-4">
+              <h3 className="mb-2 text-sm font-semibold text-red-400">Chi ha pagato dazio</h3>
+              <ul className="space-y-1 text-sm">
+                {seasonSummary.declined.slice(0, 8).map((x, i) => (
+                  <li key={i} className="flex justify-between gap-2">
+                    <span className="min-w-0 flex-1 truncate">{x.name}</span>
+                    <span className="tabular-nums text-red-300">{x.from} → {x.to}</span>
+                  </li>
+                ))}
+                {!seasonSummary.declined.length && (
+                  <li className="text-slate-500">Nessuno: la squadra sta ancora aspettando i trent'anni.</li>
+                )}
+              </ul>
+            </div>
+            <button
+              onClick={() => setSeasonSummary(null)}
+              className="w-full rounded-lg bg-teal-500 py-3 text-sm font-semibold text-pitch-950 hover:bg-teal-400"
+            >
+              Inizia la stagione {seasonSummary.season + 1}
+            </button>
+          </div>
+        </div>
+      )}
     </main>
   )
 }
