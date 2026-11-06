@@ -1,5 +1,6 @@
 import { OVR_WEIGHTS, ATTR_LABELS } from '../game/attributes'
 import { scoutedPotential } from '../game/scouting'
+import { ABILITIES, RARITY_LABEL } from '../game/abilities'
 
 const ROLE_LABELS = { GK: 'Portiere', DF: 'Difensore', MF: 'Centrocampista', FW: 'Attaccante' }
 
@@ -30,7 +31,7 @@ function AttrRow({ label, value }) {
 
 /** Scheda giocatore: attributi 1-20, contratto, statistiche di stagione,
  * stima del potenziale per la Primavera. Si apre tappando un nome in Rosa. */
-export default function PlayerCard({ player, staffLevel, round, onClose }) {
+export default function PlayerCard({ player, scouts, round, onClose }) {
   const attrs = player.attributes || {}
   const w = OVR_WEIGHTS[player.role] || OVR_WEIGHTS.MF
   const keys = [...Object.keys(w), ...(player.role === 'GK' ? ['speed'] : [])].filter(
@@ -87,9 +88,31 @@ export default function PlayerCard({ player, staffLevel, round, onClose }) {
 
         {player.youth && (
           <p className="mt-3 rounded-lg border border-slate-800 bg-pitch-950/60 px-3 py-2 text-xs text-slate-400">
-            Potenziale stimato dal tuo staff: <b className="text-teal-300">~{scoutedPotential(player, staffLevel)}</b>
+            Potenziale stimato dai tuoi osservatori: <b className="text-teal-300">~{scoutedPotential(player, scouts)}</b>
             — non tutti i giovani diventano campioni.
           </p>
+        )}
+
+        {Array.isArray(player.abilities) && player.abilities.length > 0 && (
+          <div className="mt-3">
+            <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400">Abilità speciali</h3>
+            <div className="flex flex-wrap gap-1.5">
+              {player.abilities.map((id) => {
+                const a = ABILITIES[id]
+                if (!a) return null
+                const tone = a.rarity === 'leggendaria'
+                  ? 'border-amber-400/50 bg-amber-400/10 text-amber-300'
+                  : a.rarity === 'rara'
+                    ? 'border-teal-400/40 bg-teal-400/10 text-teal-300'
+                    : 'border-slate-600 bg-slate-800 text-slate-300'
+                return (
+                  <span key={id} title={a.desc} className={'rounded border px-2 py-0.5 text-xs ' + tone}>
+                    {a.name} · {RARITY_LABEL[a.rarity]}
+                  </span>
+                )
+              })}
+            </div>
+          </div>
         )}
 
         <h3 className="mb-2 mt-4 text-xs font-semibold uppercase tracking-wider text-slate-400">Attributi</h3>

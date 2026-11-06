@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useCareer } from '../store'
 import { buildMatch, matchSeedNumber, bestXI, subImpact } from '../game/engine'
 import { Rng } from '../lib/rng'
+import { hasAbility } from '../game/abilities'
 
 /** Millisecondi per minuto simulato, per durata partita configurata. */
 const MS_PER_MINUTE = { short: 800, normal: 3500, long: 4700 }
@@ -109,7 +110,9 @@ export default function MatchScreen({ fixture, onDone }) {
       const next = { ...s }
       for (const p of onPitch) {
         if (next[p.id] === undefined) continue
-        next[p.id] = Math.max(0, next[p.id] - (STAMINA_DECAY[p.role] || 0.9))
+        let decay = STAMINA_DECAY[p.role] || 0.9
+        if (hasAbility(p, 'maratoneta')) decay *= 0.7
+        next[p.id] = Math.max(0, next[p.id] - decay)
       }
       return next
     })
