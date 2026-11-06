@@ -1,0 +1,300 @@
+import { useEffect, useMemo, useState } from 'react'
+import { useCareer } from '../store'
+import { deleteCareer, exportCareer, importCareer, listCareers, updateCareerSettings } from '../db'
+
+const ROLE_LABELS = { GK: 'Portieri', DF: 'Difensori', MF: 'Centrocampisti', FW: 'Attaccanti' }
+const ROLE_ORDER = ['GK', 'DF', 'MF', 'FW']
+const DURATIONS = { short: 'Compressa (1-2 min)', normal: 'Rilassata (5-6 min)', long: 'Cronaca estesa (7-8 min)' }
+const TABS = [
+  { id: 'home', label: 'Home' },
+  { id: 'squad', label: 'Rosa' },
+  { id: 'calendar', label: 'Calendario' },
+  { id: 'club', label: 'Club' },
+  { id: 'settings', label: 'Opzioni' },
+]
+
+function fmtMoney(v) {
+  if (v >= 1e6) return (v / 1e6).toFixed(1).replace('.', ',') + 'M'
+  if (v >= 1e3) return Math.round(v / 1e3) + 'k'
+  return String(v)
+}
+
+function MoraleDot({ value }) {
+  const color = value >= 75 ? 'bg-emerald-500' : value >= 55 ? 'bg-amber-500' : 'bg-red-500'
+  return <span className={'inline-block h-2.5 w-2.5 shrink-0 rounded-full ' + color} title={'Morale ' + value} />
+}
+
+function PlayerRow({ p, season }) {
+  return (
+    <li className="flex items-center gap-3 px-3 py-2 text-sm">
+      <span className="w-7 text-center font-bold text-teal-400">{p.ovr}</span>
+      <span className="flex-1 truncate">{p.name}</span>
+      <MoraleDot value={p.morale} />
+      <span className="hidden w-24 truncate text-xs text-slate-400 sm:block">{p.personality}</span>
+      <span className="text-xs text-slate-400">{p.age}a</span>
+      <span className="w-16 text-right text-xs text-slate-400">{fmtMoney(p.value)}</span>
+      {p.contractUntil <= season + 1 && (
+        <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] text-amber-400">Scade</span>
+      )}
+    </li>
+  )
+}
+
+function SquadList({ list, season }) {
+  return ROLE_ORDER.map((role) => {
+    const rows = list.filter((p) => p.role === role).sort((a, b) => b.ovr - a.ovr)
+    if (!rows.length) return null
+    return (
+      <div key={role} className="mb-3">
+        <h4 className="mb-1 text-xs uppercase tracking-wider text-slate-400">{ROLE_LABELS[role]}</h4>
+        <ul className="divide-y divide-slate-800/60 rounded-xl border border-slate-800 bg-pitch-900/40">
+          {rows.map((p) => <PlayerRow key={p.id} p={p} season={season} />)}
+        </ul>
+      </div>
+    )
+  })
+}
+
+function LevelBar({ label, level }) {
+  return (
+    <div className="flex items-center gap-2 text-xs">
+      <span className="w-24 text-slate-400">{label}</span>
+      <span className="flex gap-1">
+        {[1, 2, 3, 4, 5].map((n) => (
+          <span key={n} className={'h-2 w-6 rounded ' + (n <= level ? 'bg-teal-500' : 'bg-slate-800')} />
+        ))}
+      </span>
+    </div>
+  )
+}
+
+function Card({ title, children }) {
+  return (
+    <div className="rounded-xl border border-slate-800 bg-pitch-900/40 p-4">
+      <h3 className="mb-2 text-sm font-semibold">{title}</h3>
+      {children}
+    </div>
+  )
+}
+
+export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
+  const { career, clubs, players, fixtures, load, refresh } = useCareer()
+  const [tab, setTab] = useState('home')
+
+  useEffect(() => {
+    load(careerId)
+  }, [careerId, load])
+
+  const data = useMemo(() => {
+    if (!career) return null
+    const clubById = Object.fromEntries(clubs.map((c) => [c.id, c]))
+    const userClub = clubById[career.clubId]
+    const squad = players.filter((p) => p.clubId === userClub.id)
+    const userFixtures = fixtures
+      .filter((f) => f.homeId === userClub.id || f.awayId === userClub.id)
+      .sort((a, b) => a.number - b.number)
+    return { clubById, userClub, squad, userFixtures }
+  }, [career, clubs, players, fixtures])
+
+  if (!career || !data) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-pitch-950 text-slate-300">
+        Caricamento…
+      </main>
+    )
+  }
+
+  const { clubById, userClub, squad, userFixtures } = data
+  const seniors = squad.filter((p) => !p.youth)
+  const youth = squad.filter((p) => p.youth)
+  const avgMorale = squad.length ? Math.round(squad.reduce((s, p) => s + p.morale, 0) / squad.length) : 0
+  const wageBill = squad.reduce((s, p) => s + p.wage, 0)
+  const next = userFixtures.find((f) => !f.played)
+
+  async function handleExport() {
+    const json = await exportCareer(career.id)
+    const blob = new Blob([json], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'pitchtory-' + (career.seedText || career.seed) + '.json'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  async function handleImport(e) {
+    const file = e.target.files[0]
+    if (!file) return
+    try {
+      const id = await importCareer(await file.text())
+      onSwitchCareer(id)
+    } catch (err) {
+      window.alert('Import fallito: ' + err.message)
+    }
+    e.target.value = ''
+  }
+
+  async function handleDelete() {
+    if (!window.confirm('Eliminare definitivamente questa carriera?')) return
+    await deleteCareer(career.id)
+    const others = (await listCareers()).filter((c) => c.id !== career.id)
+    if (others.length) onSwitchCareer(others[0].id)
+    else onNewCareer()
+  }
+
+  return (
+    <main className="min-h-screen bg-pitch-950 pb-20 text-slate-100">
+      <header className="mx-auto max-w-5xl border-b border-slate-800/60 p-4 sm:p-8">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-[0.3em] text-teal-400">Pitchtory · Build your own legacy</p>
+            <h1 className="text-xl font-bold">{userClub.name}</h1>
+            <p className="text-xs text-slate-400">
+              Divisione d'Onore · Stagione {career.season} · {career.coachName}
+            </p>
+          </div>
+          <span className="flex shrink-0 gap-1">
+            <span className="h-4 w-4 rounded-full border border-slate-700" style={{ background: userClub.colors.primary }} />
+            <span className="h-4 w-4 rounded-full border border-slate-700" style={{ background: userClub.colors.secondary }} />
+          </span>
+        </div>
+      </header>
+
+      <section className="mx-auto max-w-5xl p-4 sm:p-8">
+        {tab === 'home' && (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Card title="Prossima partita">
+              {next ? (
+                <p className="text-sm">
+                  <span className="text-teal-400">Giornata {next.number}</span>
+                  <br />
+                  {next.homeId === userClub.id
+                    ? 'In casa contro ' + clubById[next.awayId].name
+                    : 'In trasferta a ' + clubById[next.homeId].name}
+                </p>
+              ) : (
+                <p className="text-sm text-slate-400">Stagione completata.</p>
+              )}
+            </Card>
+            <Card title="Situazione">
+              <ul className="space-y-1 text-sm text-slate-300">
+                <li>Media squadra: <b>{userClub.avgOvr}</b></li>
+                <li>Morale rosa: <b>{avgMorale}</b></li>
+                <li>Budget: <b>{fmtMoney(userClub.budget)}</b></li>
+                <li>Stipendi: <b>{fmtMoney(wageBill)}</b>/anno</li>
+              </ul>
+            </Card>
+          </div>
+        )}
+
+        {tab === 'squad' && (
+          <div>
+            <SquadList list={seniors} season={career.season} />
+            <h3 className="mb-2 text-sm uppercase tracking-wider text-teal-400">Primavera</h3>
+            <SquadList list={youth} season={career.season} />
+          </div>
+        )}
+
+        {tab === 'calendar' && (
+          <ul className="divide-y divide-slate-800/60 rounded-xl border border-slate-800">
+            {userFixtures.map((f) => {
+              const home = f.homeId === userClub.id
+              const opp = clubById[home ? f.awayId : f.homeId].name
+              return (
+                <li key={f.number} className="flex items-center gap-3 px-3 py-2 text-sm">
+                  <span className="w-10 text-xs text-slate-500">G{f.number}</span>
+                  <span className="flex-1">{(home ? 'vs ' : '@ ') + opp}</span>
+                  <span className="text-xs text-slate-500">{home ? 'Casa' : 'Trasferta'}</span>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+
+        {tab === 'club' && (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Card title="Finanze e strutture">
+              <ul className="mb-3 space-y-1 text-sm text-slate-300">
+                <li>Budget trasferimenti: <b>{fmtMoney(userClub.budget)}</b></li>
+                <li>Stipendi rosa: <b>{fmtMoney(wageBill)}</b>/anno</li>
+                <li>Stadio: <b>{userClub.stadium.name}</b> ({userClub.stadium.capacity.toLocaleString('it-IT')} posti)</li>
+              </ul>
+              <div className="space-y-1.5">
+                <LevelBar label="Stadio" level={userClub.facilities.stadiumLevel} />
+                <LevelBar label="Settore giovanile" level={userClub.facilities.youthLevel} />
+                <LevelBar label="Staff" level={userClub.facilities.staffLevel} />
+              </div>
+            </Card>
+            <Card title={'Primavera (' + youth.length + ')'}>
+              <ul className="space-y-1.5">
+                {youth.sort((a, b) => b.potential - a.potential).map((p) => (
+                  <li key={p.id} className="flex items-center gap-2 text-sm">
+                    <span className="w-6 text-center font-bold text-teal-400">{p.ovr}</span>
+                    <span className="flex-1 truncate">{p.name}</span>
+                    <span className="text-xs text-slate-400">{p.age}a</span>
+                    <span className={'text-xs ' + (p.potential - p.ovr >= 16 ? 'font-bold text-teal-400' : 'text-slate-400')}>
+                      pot {p.potential}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          </div>
+        )}
+
+        {tab === 'settings' && (
+          <div className="max-w-xl space-y-6">
+            <div>
+              <h3 className="mb-2 text-sm font-semibold">Durata partita</h3>
+              <select
+                value={career.settings.matchDuration}
+                onChange={(e) =>
+                  updateCareerSettings(career.id, { ...career.settings, matchDuration: e.target.value }).then(refresh)
+                }
+                className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none"
+              >
+                {Object.entries(DURATIONS).map(([v, l]) => (
+                  <option key={v} value={v}>{l}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button onClick={handleExport} className="rounded-lg border border-slate-700 px-4 py-2 text-sm hover:border-teal-500">
+                Esporta carriera
+              </button>
+              <label className="cursor-pointer rounded-lg border border-slate-700 px-4 py-2 text-sm hover:border-teal-500">
+                Importa carriera
+                <input type="file" accept="application/json" className="hidden" onChange={handleImport} />
+              </label>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button onClick={onNewCareer} className="rounded-lg bg-teal-500 px-4 py-2 text-sm font-semibold text-pitch-950 hover:bg-teal-400">
+                Nuova carriera
+              </button>
+              <button onClick={handleDelete} className="rounded-lg border border-red-500/50 px-4 py-2 text-sm text-red-400 hover:bg-red-500/10">
+                Elimina questa carriera
+              </button>
+            </div>
+            <p className="text-xs text-slate-500">
+              Pitchtory v0.3.0 · seed: {career.seedText || career.seed} · tutto sul tuo dispositivo, sempre.
+            </p>
+          </div>
+        )}
+      </section>
+
+      <nav className="fixed inset-x-x-0 bottom-0 border-t border-slate-800 bg-pitch-900/95 backdrop-blur">
+        <div className="mx-auto flex max-w-5xl">
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={'flex-1 py-3 text-xs font-medium ' + (tab === t.id ? 'text-teal-400' : 'text-slate-500 hover:text-slate-300')}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </nav>
+    </main>
+  )
+}

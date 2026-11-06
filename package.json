@@ -1,6 +1,6 @@
 {
-  "name": "football-eleven",
-  "version": "0.2.1",
+  "name": "pitchtory",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "scripts": {

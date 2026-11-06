@@ -1,8 +1,8 @@
-# Football Eleven ⚽
+# Pitchtory ⚽
 
-Il football manager definitivo in formato PWA. Tutto client-side: nessun account, nessun server — la carriera vive sul tuo dispositivo.
+**Pitch + Victory.** Il football manager definitivo in formato PWA. Tutto client-side: nessun account, nessun server — la carriera vive sul tuo dispositivo.
 
-> Stato: Fase 1 — Generatori dell'universo fittizio.
+> Stato: Fase 2 — Data model & gestione carriera.
 
 ## Sviluppo
 
@@ -11,9 +11,9 @@ Il football manager definitivo in formato PWA. Tutto client-side: nessun account
     npm run build     # build di produzione in dist/
     npm run preview   # anteprima della build
 
-## Anteprima F1
+## Cosa c'è nella F2
 
-In locale: inserisci un seed (es. ELEVEN-CASA) e premi "Genera universo". Stesso seed → stesso universo, sempre: 20 club della Divisione d'Onore (8 con nome e storia a mano, 12 generati), 28 calciatori ciascuno (22 prima squadra + 6 Primavera), calendario andata/ritorno a 38 giornate.
+Nuova carriera (nome allenatore, seed, durata partita, scelta del club), dashboard mobile-first con Panoramica, Rosa (con morale, personalità e contratti in scadenza), Calendario, Club (finanze, strutture, Primavera) e Opzioni (durata partita, export/import JSON, gestione carriere). Tutto persistito in IndexedDB (Dexie) e deterministico dal seed.
 
 ## Stack
 
@@ -32,7 +32,7 @@ React · Vite · Tailwind CSS · Dexie (IndexedDB) · Zustand · PRNG con seed (
 
 - [x] F0 — Fondazioni: scaffold, Dexie, PRNG, CI
 - [x] F1 — Generatori dell'universo fittizio
-- [ ] F2 — Data model & gestione (contratti, giovanili, morale, rapporti)
+- [x] F2 — Data model & gestione (carriere, contratti, morale, giovanili)
 - [ ] F3 — Motore partite live + QTE + sostituzioni
 - [ ] F4 — Mercato
 - [ ] F5 — Abilità Speciali
