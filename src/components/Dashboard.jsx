@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useCareer } from '../store'
-import { deleteCareer, exportCareer, importCareer, listCareers, updateCareerSettings } from '../db'
+import { deleteCareer, exportCareer, importCareer, listCareers, saveFixtureResults, applyPostMatch, updateCareerSettings } from '../db'
 import { scoutedPotential } from '../game/scouting'
+import { computeStandings } from '../game/standings'
+import { simulateMatch, matchSeed } from '../game/engine'
+import MatchScreen from './MatchScreen'
 
 const ROLE_LABELS = { GK: 'Portieri', DF: 'Difensori', MF: 'Centrocampisti', FW: 'Attaccanti' }
 const ROLE_ORDER = ['GK', 'DF', 'MF', 'FW']
@@ -84,9 +87,45 @@ function Card({ title, children }) {
   )
 }
 
+function Standings({ rows, userClubId }) {
+  return (
+    <div className="overflow-x-auto rounded-xl border border-slate-800 bg-pitch-900/40">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-left text-[10px] uppercase text-slate-500">
+            <th className="px-3 py-2">#</th>
+            <th>Squadra</th>
+            <th className="px-1 text-center">PG</th>
+            <th className="px-1 text-center">V</th>
+            <th className="px-1 text-center">N</th>
+            <th className="px-1 text-center">P</th>
+            <th className="px-1 text-center">GF:GA</th>
+            <th className="px-2 text-center">Pt</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={r.clubId} className={r.clubId === userClubId ? 'bg-teal-500/10 text-teal-300' : ''}>
+              <td className="px-3 py-1.5 text-xs text-slate-500">{i + 1}</td>
+              <td className="max-w-[10rem] truncate px-1 py-1.5">{r.name}</td>
+              <td className="px-1 text-center text-xs">{r.played}</td>
+              <td className="px-1 text-center text-xs">{r.w}</td>
+              <td className="px-1 text-center text-xs">{r.d}</td>
+              <td className="px-1 text-center text-xs">{r.l}</td>
+              <td className="px-1 text-center text-xs text-slate-400">{r.gf}:{r.ga}</td>
+              <td className="px-2 text-center font-bold">{r.pts}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
   const { career, clubs, players, fixtures, load, refresh } = useCareer()
   const [tab, setTab] = useState('home')
+  const [matchFixture, setMatchFixture] = useState(null)
 
   useEffect(() => {
     load(careerId)
@@ -100,7 +139,10 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
     const userFixtures = fixtures
       .filter((f) => f.homeId === userClub.id || f.awayId === userClub.id)
       .sort((a, b) => a.number - b.number)
-    return { clubById, userClub, squad, userFixtures }
+    const playersByClub = {}
+    for (const p of players) (playersByClub[p.clubId] = playersByClub[p.clubId] || []).push(p)
+    const standings = computeStandings(clubs, fixtures)
+    return { clubById, userClub, squad, userFixtures, playersByClub, standings }
   }, [career, clubs, players, fixtures])
 
   if (!career || !data) {
@@ -111,7 +153,7 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
     )
   }
 
-  const { clubById, userClub, squad, userFixtures } = data
+  const { clubById, userClub, squad, userFixtures, playersByClub, standings } = data
   const seniors = squad.filter((p) => !p.youth)
   const youth = squad.filter((p) => p.youth)
   const avgMorale = squad.length ? Math.round(squad.reduce((s, p) => s + p.morale, 0) / squad.length) : 0
@@ -121,6 +163,24 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
   const youthRanked = youth
     .slice()
     .sort((a, b) => scoutedPotential(b, staffLevel) - scoutedPotential(a, staffLevel))
+  const position = standings.findIndex((r) => r.clubId === userClub.id) + 1
+
+  async function handleMatchEnd(result) {
+    const fixture = matchFixture
+    if (!fixture) return
+    const others = fixtures.filter((f) => f.number === fixture.number && f.key !== fixture.key && !f.played)
+    const simResults = others.map((f) => {
+      const sim = simulateMatch(clubById[f.homeId], clubById[f.awayId], playersByClub, matchSeed(career.seed, f.key))
+      return { key: f.key, homeGoals: sim.homeGoals, awayGoals: sim.awayGoals }
+    })
+    await saveFixtureResults([
+      { key: fixture.key, homeGoals: result.homeGoals, awayGoals: result.awayGoals },
+      ...simResults,
+    ])
+    await applyPostMatch(career.id, fixture, result, userClub.id, squad)
+    setMatchFixture(null)
+    await load(career.id)
+  }
 
   async function handleExport() {
     const json = await exportCareer(career.id)
@@ -173,29 +233,41 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
 
       <section className="mx-auto max-w-5xl p-4 sm:p-8">
         {tab === 'home' && (
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Card title="Prossima partita">
-              {next ? (
-                <p className="text-sm">
-                  <span className="text-teal-400">Giornata {next.number}</span>
-                  <br />
-                  {next.homeId === userClub.id
-                    ? 'In casa contro ' + clubById[next.awayId].name
-                    : 'In trasferta a ' + clubById[next.homeId].name}
-                </p>
-              ) : (
-                <p className="text-sm text-slate-400">Stagione completata.</p>
-              )}
-            </Card>
-            <Card title="Situazione">
-              <ul className="space-y-1 text-sm text-slate-300">
-                <li>Media squadra: <b>{userClub.avgOvr}</b></li>
-                <li>Morale rosa: <b>{avgMorale}</b></li>
-                <li>Budget: <b>{fmtMoney(userClub.budget)}</b></li>
-                <li>Stipendi: <b>{fmtMoney(wageBill)}</b></li>
-              </ul>
-            </Card>
-          </div>
+          <>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Card title="Prossima partita">
+                {next ? (
+                  <div className="text-sm">
+                    <p className="text-teal-400">Giornata {next.number}</p>
+                    <p className="mt-1">
+                      {next.homeId === userClub.id
+                        ? 'In casa contro ' + clubById[next.awayId].name
+                        : 'In trasferta a ' + clubById[next.homeId].name}
+                    </p>
+                    <button
+                      onClick={() => setMatchFixture(next)}
+                      className="mt-3 w-full rounded-lg bg-teal-500 py-2 text-sm font-semibold text-pitch-950 hover:bg-teal-400"
+                    >
+                      Vai in campo
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-400">Stagione completata.</p>
+                )}
+              </Card>
+              <Card title="Situazione">
+                <ul className="space-y-1 text-sm text-slate-300">
+                  <li>Posizione: <b>{position ? position + '° su ' + standings.length : '—'}</b></li>
+                  <li>Media squadra: <b>{userClub.avgOvr}</b></li>
+                  <li>Morale rosa: <b>{avgMorale}</b></li>
+                  <li>Budget: <b>{fmtMoney(userClub.budget)}</b></li>
+                  <li>Stipendi: <b>{fmtMoney(wageBill)}</b>/anno</li>
+                </ul>
+              </Card>
+            </div>
+            <h3 className="mb-2 mt-6 text-sm font-semibold">Classifica</h3>
+            <Standings rows={standings} userClubId={userClub.id} />
+          </>
         )}
 
         {tab === 'squad' && (
@@ -215,7 +287,13 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
                 <li key={f.number} className="flex items-center gap-3 px-3 py-2 text-sm">
                   <span className="w-10 text-xs text-slate-500">G{f.number}</span>
                   <span className="flex-1">{(home ? 'vs ' : '@ ') + opp}</span>
-                  <span className="text-xs text-slate-500">{home ? 'Casa' : 'Trasferta'}</span>
+                  {f.played ? (
+                    <span className="w-12 text-right font-bold tabular-nums">
+                      {home ? f.homeGoals + '-' + f.awayGoals : f.awayGoals + '-' + f.homeGoals}
+                    </span>
+                  ) : (
+                    <span className="w-12 text-right text-xs text-slate-500">{home ? 'Casa' : 'Trasferta'}</span>
+                  )}
                 </li>
               )
             })}
@@ -253,7 +331,7 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
                 ))}
               </ul>
               <p className="mt-3 text-xs text-slate-500">
-                Il potenziale dei giovani è una stima (~) del tuo staff: non tutti i giovani diventano campioni, e il tuo staff non sbaglia mai per caso due volte.
+                Il potenziale dei giovani è una stima (~) del tuo staff: non tutti i giovani diventano campioni.
               </p>
             </Card>
           </div>
@@ -293,7 +371,7 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
               </button>
             </div>
             <p className="text-xs text-slate-500">
-              Pitchtory v0.3.0 · seed: {career.seedText || career.seed} · tutto sul tuo dispositivo, sempre.
+              Pitchtory v0.4.0 · seed: {career.seedText || career.seed} · tutto sul tuo dispositivo, sempre.
             </p>
           </div>
         )}
@@ -312,6 +390,8 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
           ))}
         </div>
       </nav>
+
+      {matchFixture && <MatchScreen fixture={matchFixture} onDone={handleMatchEnd} />}
     </main>
   )
 }

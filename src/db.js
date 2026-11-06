@@ -4,6 +4,7 @@ import { generateSchedule } from './game/schedule'
 import { Rng } from './lib/rng'
 
 const PERSONALITIES = ['Leader', 'Professionista', 'Temperamentale', 'Sognatore', 'Grintoso', 'Pacato']
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v))
 
 /**
  * Database locale (IndexedDB via Dexie). Tutto client-side.
@@ -62,9 +63,8 @@ export async function createCareer({ seed, seedText, coachName, clubId, matchDur
   return careerId
 }
 
-const stripKeys = ({ key, careerId, ...rest }) => rest
-
-/** Carica una carriera completa (metadati + club + calciatori + calendario). */
+/** Carica una carriera completa. Le righe conservano key e careerId
+ * (servono per aggiornare i risultati senza rilizzare il database). */
 export async function loadCareer(id) {
   const career = await db.careers.get(id)
   const [clubs, players, fixtures] = await Promise.all([
@@ -72,12 +72,7 @@ export async function loadCareer(id) {
     db.players.where('careerId').equals(id).toArray(),
     db.fixtures.where('careerId').equals(id).toArray(),
   ])
-  return {
-    career,
-    clubs: clubs.map(stripKeys),
-    players: players.map(stripKeys),
-    fixtures: fixtures.map(stripKeys),
-  }
+  return { career, clubs, players, fixtures }
 }
 
 export async function listCareers() {
@@ -95,12 +90,51 @@ export async function deleteCareer(id) {
   })
 }
 
+/** Scrive i risultati di una o più partite giocate. */
+export async function saveFixtureResults(results) {
+  await db.transaction('rw', db.fixtures, async () => {
+    for (const r of results) {
+      await db.fixtures.update(r.key, { played: true, homeGoals: r.homeGoals, awayGoals: r.awayGoals })
+    }
+  })
+}
+
+/** Morale post-partita della squadra dell'utente: vittoria +5, sconfitta -5,
+ * pareggio +1, +2 ai marcatori. Clamp 20-99. */
+export async function applyPostMatch(careerId, fixture, result, userClubId, userPlayers) {
+  const isHome = fixture.homeId === userClubId
+  const userGoals = isHome ? result.homeGoals : result.awayGoals
+  const oppGoals = isHome ? result.awayGoals : result.homeGoals
+  const delta = userGoals > oppGoals ? 5 : userGoals < oppGoals ? -5 : 1
+  const scorerIds = new Set(
+    result.events
+      .filter((e) => e.type === 'goal' && e.side === (isHome ? 'home' : 'away'))
+      .map((e) => e.playerId),
+  )
+  await db.transaction('rw', db.players, async () => {
+    for (const p of userPlayers) {
+      let morale = clamp(p.morale + delta, 20, 99)
+      if (scorerIds.has(p.id)) morale = clamp(morale + 2, 20, 99)
+      if (p.key) await db.players.update(p.key, { morale })
+    }
+  })
+}
+
+const stripKeys = ({ key, careerId, ...rest }) => rest
+
 /** Esporta la carriera in JSON (condivisibile, riportabile su un altro device). */
 export async function exportCareer(id) {
   const { career, clubs, players, fixtures } = await loadCareer(id)
   const meta = { ...career }
   delete meta.id
-  return JSON.stringify({ app: 'pitchtory', format: 1, career: meta, clubs, players, fixtures })
+  return JSON.stringify({
+    app: 'pitchtory',
+    format: 1,
+    career: meta,
+    clubs: clubs.map(stripKeys),
+    players: players.map(stripKeys),
+    fixtures: fixtures.map(stripKeys),
+  })
 }
 
 /** Importa una carriera esportata. Ritorna l'id della nuova carriera. */
@@ -109,9 +143,9 @@ export async function importCareer(json) {
   if (data.app !== 'pitchtory' || data.format !== 1) throw new Error('File di carriera non riconosciuto')
   const careerId = await db.careers.add({ ...data.career, imported: true })
   await db.transaction('rw', db.clubs, db.players, db.fixtures, async () => {
-    await db.clubs.bulkAdd(data.clubs.map((c) => ({ key: careerId + ':' + c.id, careerId, ...c })))
-    await db.players.bulkAdd(data.players.map((p) => ({ key: careerId + ':' + p.id, careerId, ...p })))
-    await db.fixtures.bulkAdd(data.fixtures.map((f, i) => ({ key: careerId + ':i' + i, careerId, ...f })))
+    await db.clubs.bulkAdd(data.clubs.map((c) => ({ ...c, key: careerId + ':' + c.id, careerId })))
+    await db.players.bulkAdd(data.players.map((p) => ({ ...p, key: careerId + ':' + p.id, careerId })))
+    await db.fixtures.bulkAdd(data.fixtures.map((f, i) => ({ ...f, key: careerId + ':i' + i, careerId })))
   })
   return careerId
 }
