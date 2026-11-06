@@ -2,7 +2,7 @@
 
 **Pitch + Victory.** Il football manager definitivo in formato PWA. Tutto client-side: nessun account, nessun server — la carriera vive sul tuo dispositivo.
 
-> Stato: Fase 3 completa — motore partite, QTE, sostituzioni, infortuni, evoluzione OVR e fine stagione. Prossima: F4 mercato.
+> Stato: Fase 3.5 completa — motore partite, QTE, sostituzioni, infortuni, evoluzione OVR, fine stagione, attributi 1-20 e schede giocatore. Prossima: F4 mercato.
 
 ## Sviluppo
 
@@ -25,6 +25,12 @@ Motore di simulazione tick-based con gol Poisson guidati dalla forza delle squad
 
 **Fine stagione**: titolo assegnato alla prima in classifica, trofeo salvato nella carriera, riepilogo con chi è cresciuto e chi ha pagato dazio, invecchiamento, promozione dei Primavera che compiono 19 anni, calendario nuovo. La stessa carriera, lo stesso futuro: le stagioni successive sono deterministiche quanto la prima.
 
+## Attributi e schede giocatore (F3.5)
+
+Ogni calciatore ha **8 attributi in scala 1-20** — Velocità, Resistenza... no: Velocità, Tiro, Passaggio, Dribbling, Contrasto e Fisico per gli outfield; Riflessi, Tuffi, Presa, Posizione, Rinvii e Velocità per i portieri. L'**OVR non esiste più come numero a sé: è derivato**, media pesata per ruolo (il Contrasto pesa il 30% per un difensore, il Tiro il 30% per un attaccante). Tappa un nome nella Rosa e si apre la scheda: barre degli attributi, contratto, morale, statistiche di stagione e — per la Primavera — la stima del potenziale da parte del tuo staff.
+
+**Crescita attributo per attributo**: le percentuali di progressione muovono i singoli attributi, non un OVR astratto. Chi gioca di più allena gli attributi che contano per il suo ruolo; il declino over-30 colpisce prima Velocità e Fisico — il 33enne che perde lo scatto, come nella vita. Le carriere esistenti vengono migrate al volo al primo caricamento, deterministica dal seed e centrata sull'OVR attuale: la tua stagione continua identica.
+
 ## Stack
 
 React · Vite · Tailwind CSS · Dexie (IndexedDB) · Zustand · PRNG con seed (carriere deterministiche e condivisibili)
@@ -35,6 +41,7 @@ React · Vite · Tailwind CSS · Dexie (IndexedDB) · Zustand · PRNG con seed (
 - Partite della propria squadra sempre live, con QTE nei momenti chiave (3 opzioni, timer 10 s, scelta prudente allo scadere)
 - Durata partita a scelta dell'utente: 1-2 min (compressa) · 5-6 min (rilassata) · 7-8 min (cronaca estesa); "salta al risultato" proposto prima del fischio d'inizio
 - Massimo 3 sostituzioni a partita, con stamina per ruolo e impatto deterministico dei freschi
+- Attributi 1-20 come fonte di verità, OVR derivato per ruolo: la crescita e il declino si vedono punto per punto
 - Chi gioca migliora di più: la progressione dipende dai minuti, dall'età e dal potenziale nascosto
 - Gestione completa: mercato, contratti, morale, rapporti
 - Potenziale dei giovani mai rivelato: stima dello staff, sistema osservatori completo in F4/F5
@@ -45,8 +52,9 @@ React · Vite · Tailwind CSS · Dexie (IndexedDB) · Zustand · PRNG con seed (
 
 - [x] F0 — Fondazioni: scaffold, Dexie, PRNG, CI
 - [x] F1 — Generatori dell'universo fittizio
-- [x] F2 — Data model & gestione (carriere, contratti, morale, giovanili)
+- [x] F2 — Data model & gestione (carriere, contratti, moduli, giovanili)
 - [x] F3 — Motore partite live, QTE, sostituzioni, infortuni, progressione, fine stagione
+- [x] F3.5 — Attributi 1-20, OVR derivato, schede giocatore
 - [ ] F4 — Mercato
 - [ ] F5 — Abilità Speciali
 - [ ] F6 — PWA completa (manifest, service worker, _headers, bilingue)
