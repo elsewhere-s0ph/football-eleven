@@ -2,7 +2,7 @@
 
 **Pitch + Victory.** Il football manager definitivo in formato PWA. Tutto client-side: nessun account, nessun server — la carriera vive sul tuo dispositivo.
 
-> Stato: Fase 3 — Motore partite (in corso: motore, replay live, classifica; in arrivo: QTE e sostituzioni).
+> Stato: Fase 3 — Motore partite (QTE completati; in arrivo: sostituzioni, stamina, evoluzione OVR).
 
 ## Sviluppo
 
@@ -13,7 +13,11 @@
 
 ## Cosa c'è nella F3 (finora)
 
-Motore di simulazione tick-based con gol Poisson guidati dalla forza delle squadre (miglior XI, morale, fattore campo), marcatori e assist, cronaca con occasioni e cartellini. Partita della propria squadra in replay live alla velocità scelta (1-2 / 5-6 / 7-8 minuti), con "salta al risultato" prima del fischio d'inizio. Il resto della giornata si simula in background, la classifica si aggiorna e il morale risente del risultato. In arrivo: QTE nei momenti chiave e sostituzioni.
+Motore di simulazione tick-based con gol Poisson guidati dalla forza delle squadre (miglior XI, morale, fattore campo), marcatori e assist, cronaca con occasioni e cartellini. Partita della propria squadra in replay live alla velocità scelta (1-2 / 5-6 / 7-8 minuti), con "salta al risultato" prima del fischio d'inizio.
+
+**QTE nei momenti chiave**: rigori da giocare, contropiedi da fermare, corner finali da approcciare. 3 opzioni, timer 10 secondi, scelta prudente automatica allo scadere. L'esito di ogni opzione è precomputato deterministicamente: lo stesso QTE dà sempre lo stesso esito, niente reroll ricaricando la pagina.
+
+Il resto della giornata si simula in background, la classifica si aggiorna e il morale risente del risultato. In arrivo: sostituzioni, stamina, infortuni e progressione dei giocatori durante la stagione.
 
 ## Stack
 
