@@ -39,22 +39,23 @@ export default function SetupScreen({ onStart }) {
   }
 
   return (
-    <main className="min-h-screen bg-pitch-950 text-slate-100 p-4 sm:p-8 max-w-5xl mx-auto">
+    <main className="min-h-screen bg-pitch-950 p-4 text-slate-100 max-w-5xl mx-auto sm:p-8">
+      <div className="pointer-events-none fixed left-1/2 top-0 h-44 w-[28rem] -translate-x-1/2 rounded-full bg-flood-400/10 blur-3xl" />
       <header className="mb-8">
-        <p className="text-xs uppercase tracking-[0.3em] text-teal-400">Little Elsewhere</p>
-        <h1 className="text-3xl font-bold">Pitchtory</h1>
+        <p className="scoreboard text-[10px] tracking-[0.35em] text-flood-400">Little Elsewhere</p>
+        <h1 className="scoreboard text-4xl font-semibold tracking-wide text-flood-300">Pitchtory</h1>
         <p className="text-sm text-slate-400">Build your own legacy — nuova carriera</p>
       </header>
 
       {!universe ? (
-        <div className="max-w-md space-y-4 rounded-xl border border-slate-800 bg-pitch-900/40 p-6">
+        <div className="max-w-md animate-fade-up space-y-4 rounded-xl border border-pitch-700/60 bg-pitch-900/50 p-6">
           <div>
             <label className="mb-1 block text-xs text-slate-400">Nome dell'allenatore</label>
             <input
               value={coachName}
               onChange={(e) => setCoachName(e.target.value)}
               placeholder="Mister"
-              className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none"
+              className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm transition focus:border-flood-400 focus:outline-none focus:shadow-[0_0_16px_rgba(239,191,78,0.15)]"
             />
           </div>
           <div>
@@ -63,7 +64,7 @@ export default function SetupScreen({ onStart }) {
               value={seedText}
               onChange={(e) => setSeedText(e.target.value)}
               placeholder="es. ELEVEN-CASA"
-              className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none"
+              className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm transition focus:border-flood-400 focus:outline-none focus:shadow-[0_0_16px_rgba(239,191,78,0.15)]"
             />
           </div>
           <div>
@@ -71,7 +72,7 @@ export default function SetupScreen({ onStart }) {
             <select
               value={duration}
               onChange={(e) => setDuration(e.target.value)}
-              className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none"
+              className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm transition focus:border-flood-400 focus:outline-none focus:shadow-[0_0_16px_rgba(239,191,78,0.15)]"
             >
               {Object.entries(DURATIONS).map(([v, l]) => (
                 <option key={v} value={v}>{l}</option>
@@ -80,7 +81,7 @@ export default function SetupScreen({ onStart }) {
           </div>
           <button
             onClick={generate}
-            className="w-full rounded-lg bg-teal-500 py-2.5 text-sm font-semibold text-pitch-950 hover:bg-teal-400"
+            className="w-full rounded-lg bg-teal-500 py-2.5 text-sm font-semibold text-pitch-950 shadow-[0_0_20px_rgba(47,181,110,0.25)] transition hover:bg-teal-400 hover:shadow-[0_0_28px_rgba(47,181,110,0.35)] active:scale-[0.98]"
           >
             Genera universo
           </button>
@@ -98,7 +99,7 @@ export default function SetupScreen({ onStart }) {
               <button
                 key={c.id}
                 onClick={() => setSelectedId(c.id)}
-                className={'text-left rounded-xl border p-4 transition hover:border-teal-500 ' + (c.id === selectedId ? 'border-teal-500 bg-pitch-900' : 'border-slate-800 bg-pitch-900/40')}
+                className={'text-left rounded-xl border p-4 transition hover:-translate-y-0.5 hover:border-teal-500 ' + (c.id === selectedId ? 'border-teal-500 bg-pitch-900 shadow-[0_0_24px_rgba(47,181,110,0.2)]' : 'border-slate-800 bg-pitch-900/40')}
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-semibold">{c.name}</span>
@@ -117,14 +118,14 @@ export default function SetupScreen({ onStart }) {
               </button>
             ))}
           </div>
-          <div className="sticky bottom-4 mt-6 flex items-center justify-between gap-3 rounded-xl border border-teal-500/40 bg-pitch-900 p-4">
+          <div className="sticky bottom-4 mt-6 flex items-center justify-between gap-3 rounded-xl border border-teal-500/40 bg-pitch-900/95 p-4 shadow-[0_10px_40px_rgba(0,0,0,0.5)] backdrop-blur">
             <p className="text-sm text-slate-300">
               {selectedId ? 'Hai scelto: ' + universe.clubs.find((c) => c.id === selectedId).name : 'Seleziona un club per iniziare'}
             </p>
             <button
               onClick={start}
               disabled={!selectedId || saving}
-              className="rounded-lg bg-teal-500 px-5 py-2 text-sm font-semibold text-pitch-950 hover:bg-teal-400 disabled:opacity-40"
+              className="rounded-lg bg-teal-500 px-5 py-2 text-sm font-semibold text-pitch-950 shadow-[0_0_20px_rgba(47,181,110,0.25)] transition hover:bg-teal-400 hover:shadow-[0_0_28px_rgba(47,181,110,0.35)] active:scale-[0.98] disabled:opacity-40"
             >
               {saving ? 'Creo la carriera…' : 'Inizia carriera'}
             </button>

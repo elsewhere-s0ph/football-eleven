@@ -47,21 +47,21 @@ export default function PlayerCard({ player, scouts, round, onClose }) {
       onClick={onClose}
     >
       <div
-        className="mx-auto mt-6 max-w-sm rounded-2xl border border-slate-700 bg-pitch-900 p-5 shadow-xl"
+        className="animate-fade-up mx-auto mt-6 max-w-sm rounded-2xl border border-pitch-700 bg-pitch-900 p-5 shadow-[0_0_40px_rgba(239,191,78,0.06),0_10px_40px_rgba(0,0,0,0.5)]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-xs uppercase tracking-wider text-teal-400">
+            <p className="text-[10px] uppercase tracking-[0.25em] text-teal-400">
               {ROLE_LABELS[player.role]} · {player.age} anni{player.youth ? ' · Primavera' : ''}
             </p>
-            <h2 className="truncate text-xl font-bold">{player.name}</h2>
+            <h2 className="scoreboard truncate text-2xl font-semibold">{player.name}</h2>
             <p className="mt-0.5 text-xs text-slate-400">
               {player.personality} · piede {player.foot || 'destro'}
             </p>
           </div>
           <div className="shrink-0 text-center">
-            <p className="text-3xl font-bold tabular-nums text-teal-300">{player.ovr}</p>
+            <p className="text-4xl font-bold tabular-nums text-flood-300">{player.ovr}</p>
             <p className="text-[10px] uppercase text-slate-500">Overall</p>
           </div>
         </div>
@@ -101,7 +101,7 @@ export default function PlayerCard({ player, scouts, round, onClose }) {
                 const a = ABILITIES[id]
                 if (!a) return null
                 const tone = a.rarity === 'leggendaria'
-                  ? 'border-amber-400/50 bg-amber-400/10 text-amber-300'
+                  ? 'border-flood-400/60 bg-flood-400/10 text-flood-300 shadow-[0_0_12px_rgba(239,191,78,0.25)]'
                   : a.rarity === 'rara'
                     ? 'border-teal-400/40 bg-teal-400/10 text-teal-300'
                     : 'border-slate-600 bg-slate-800 text-slate-300'
