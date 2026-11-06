@@ -282,7 +282,7 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
         )}
       </section>
 
-      <nav className="fixed inset-x-x-0 bottom-0 border-t border-slate-800 bg-pitch-900/95 backdrop-blur">
+      <nav className="fixed inset-x-0 bottom-0 border-t border-slate-800 bg-pitch-900/95 backdrop-blur">
         <div className="mx-auto flex max-w-5xl">
           {TABS.map((t) => (
             <button
