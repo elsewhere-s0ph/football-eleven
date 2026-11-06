@@ -2,7 +2,7 @@
 
 **Pitch + Victory.** Il football manager definitivo in formato PWA. Tutto client-side: nessun account, nessun server — la carriera vive sul tuo dispositivo.
 
-> Stato: Fase 5 completa — motore partite, QTE, sostituzioni, infortuni, attributi 1-20, schede giocatore, fine stagione, mercato, abilità speciali e osservatorio. Prossima: F6 standard PWA completo.
+> Stato: Fase 5 completa + restyle «Notte di Divisione d'Onore» (v0.12.0) — motore partite, QTE, sostituzioni, infortuni, attributi 1-20, schede giocatore, fine stagione, mercato, abilità speciali, osservatorio e identità visiva dedicata con logo kit. Prossima: F6 standard PWA completo.
 
 ## Sviluppo
 
@@ -49,6 +49,16 @@ Il calcio si compra e si vende, a finestre: **estiva** (prima della giornata 1) 
 
 **Osservatorio**: la stima del potenziale della Primavera passa dallo staff alla **rete di osservatori** — livelli 1-5 con margine di errore da ±10 a ±2 OVR, **focus per ruolo** (portieri, difensori, centrocampisti, attaccanti) che restringe il dubbio, potenziamenti a budget (da 2M a 15M). Ogni potenziamento rilegge la Primavera: le stime cambiano, la verità no. Chi ha un'abilità porta il **✦** in rosa e nel mercato, e il valore di mercato premia i campioni.
 
+## Notte di Divisione d'Onore (restyle v0.12.0)
+
+Un match serale sotto i riflettori, in un campetto che nessuno conosce. Identità dedicata al gioco, non ereditata dallo studio:
+
+- **Palette**: verde notte `#050d08`/`#0a1710` (fondo e superfici) · oro da riflettore `#efbf4e` (il colore del legacy: gol, trofei, ✦ leggendarie, tab attivo) · erba illuminata `#2fb56e`/`#47d489` (azioni e stati positivi) · bianco gesso `#f2f6f1` (testo) · rosso cartellino per il resto.
+- **Tipografia**: Oswald per tabellone, wordmark, nomi e punteggi (classe `.scoreboard`, numeri tabulari), Archivo per il testo — via `@fontsource`, così la PWA resta offline-friendly.
+- **Texture**: grana leggera da notte di stadio sopra tutto (`body::before`), scrollbar discreta, selezione oro.
+- **Motion**: `goal-flash` (bagliore oro sul tabellino a ogni gol e sul punteggio finale), `slide-in` per gli eventi della cronaca, `fade-up` per card e pannelli, `urgent` per gli ultimi 3 secondi dei QTE e il caricamento. Tutto disattivato con `prefers-reduced-motion`.
+- **Strategy**: la scala `pitch` è stata ridefinita per intero e `slate`/`teal`/`amber` rimappati sui nuovi toni — l'intera app ha cambiato pelle senza riscrivere una riga di logica.
+- **Logo kit**: crest tondo (PITCHTORY su arco, EST. 2026, stella oro, palla gesso), variante monocroma, wordmark, icona maskable e favicon in `src/assets/`; anteprima ed export PNG da `logokit.html` con `npm run dev` + `/logokit.html`. Le PNG si caricano a mano nel repo: il push binario via API corrompe le immagini.
 ## Stack
 
 React · Vite · Tailwind CSS · Dexie (IndexedDB) · Zustand · PRNG con seed (carriere deterministiche e condivisibili)
@@ -75,6 +85,7 @@ React · Vite · Tailwind CSS · Dexie (IndexedDB) · Zustand · PRNG con seed (
 - [x] F3.5 — Attributi 1-20, OVR derivato, schede giocatore
 - [x] F4 — Mercato: finestre estiva e invernale, trattative con controfferta, offerte AI, la lega che commercia
 - [x] F5 — Abilità Speciali e osservatori
+- [x] F5.5 — Restyle grafico: identità «Notte di Divisione d'Onore» + logo kit
 - [ ] F6 — PWA completa (manifest, service worker, _headers, bilingue)
 - [ ] F7 — Capacitor (app vera)
 
