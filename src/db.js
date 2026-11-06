@@ -5,6 +5,7 @@ import { computeStandings } from './game/standings'
 import { seasonGrowth } from './game/progression'
 import { deriveOvr, migrateAttrs, rollAttrsForOvr, growAttrs, declineAttrs } from './game/attributes'
 import { aiTransferDeals } from './game/market'
+import { assignLeagueAbilities, abilityValueBonus } from './game/abilities'
 import { Rng, seedFromString } from './lib/rng'
 
 const PERSONALITIES = ['Leader', 'Professionista', 'Temperamentale', 'Sognatore', 'Grintoso', 'Pacato']
@@ -37,6 +38,7 @@ export async function createCareer({ seed, seedText, coachName, clubId, matchDur
     clubId,
     season: universe.season,
     settings: { matchDuration },
+    scouts: { level: 1, focus: null },
     trophies: [],
     createdAt: new Date().toISOString(),
   })
@@ -98,6 +100,31 @@ export async function loadCareer(id) {
         if (p.key) await db.players.update(p.key, { attributes: p.attributes })
       }
     })
+  }
+
+  // Migrazione lazy (v0.11): chi non ha le abilità speciali (F5) le riceve
+  // qui, deterministicamente dal seed — stessa lega, stessi campioni.
+  // E le abilità si pagano: il valore di mercato si aggiusta.
+  const noAbilities = players.filter((p) => !Array.isArray(p.abilities))
+  if (noAbilities.length) {
+    const abilityMap = assignLeagueAbilities(career.seed, players)
+    await db.transaction('rw', db.players, async () => {
+      for (const p of noAbilities) {
+        p.abilities = abilityMap[p.id] || []
+        if (p.key) {
+          const base = playerValue(p.ovr, p.age, p.potential)
+          const value = Math.max(30000, Math.round((base * (1 + abilityValueBonus(p.abilities))) / 10000) * 10000)
+          p.value = value
+          await db.players.update(p.key, { abilities: p.abilities, value })
+        }
+      }
+    })
+  }
+
+  // Migrazione lazy (v0.11): l'osservatorio della carriera (F5).
+  if (!career.scouts) {
+    career.scouts = { level: 1, focus: null }
+    await db.careers.update(id, { scouts: career.scouts })
   }
 
   return { career, clubs, players, fixtures }
@@ -209,6 +236,33 @@ export async function transferPlayer(careerId, playerKey, fromClubKey, toClubKey
   })
 }
 
+/** Costo per portare l'osservatorio al livello indicato (2 → 5). */
+export const SCOUT_UPGRADE_COST = { 2: 2000000, 3: 4000000, 4: 8000000, 5: 15000000 }
+
+/**
+ * Potenzia la rete di osservatori (F5): il budget paga, e la Primavera
+ * si rilegge più precisa. Deterministico: stesso livello, stesse letture.
+ */
+export async function upgradeScouts(careerId) {
+  await db.transaction('rw', db.careers, db.clubs, async () => {
+    const career = await db.careers.get(careerId)
+    const club = await db.clubs.get(careerId + ':' + career.clubId)
+    const level = (career.scouts && career.scouts.level) || 1
+    if (level >= 5) throw new Error('Osservatorio già al massimo')
+    const cost = SCOUT_UPGRADE_COST[level + 1]
+    if (club.budget < cost) throw new Error('Budget insufficiente: servono ' + cost / 1000000 + 'M')
+    await db.clubs.update(club.key, { budget: club.budget - cost })
+    await db.careers.update(careerId, { scouts: { ...(career.scouts || { level: 1, focus: null }), level: level + 1 } })
+  })
+}
+
+/** Sposta il focus degli osservatori: gratis, ma la rilettura cambia. */
+export async function setScoutFocus(careerId, focus) {
+  const career = await db.careers.get(careerId)
+  if (!career) return
+  await db.careers.update(careerId, { scouts: { ...(career.scouts || { level: 1, focus: null }), focus: focus || null } })
+}
+
 /**
  * Chiude la stagione: assegna il titolo, fa crescere (o invecchiare) i
  * giocatori attributo per attributo, lascia che la lega si rinforzi sul
@@ -274,7 +328,7 @@ export async function endSeason(careerId) {
         age,
         attributes,
         youth: p.youth && age < 19,
-        value: playerValue(ovr, age, p.potential),
+        value: Math.max(30000, Math.round((playerValue(ovr, age, p.potential) * (1 + abilityValueBonus(p.abilities))) / 10000) * 10000),
         apps: 0,
         minutes: 0,
         goals: 0,
