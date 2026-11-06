@@ -110,6 +110,27 @@ function buildClubs(rng) {
 
 /* ---------------- Calciatori ---------------- */
 
+/**
+ * Potenziale dei giovani: non tutti diventano campioni.
+ * 15% gemme (+16-26), 30% buoni (+9-15), 35% medi (+3-8),
+ * 20% che non sboccia (+0-2). In media una gemma ogni 6-7 giovani.
+ */
+function youthGrowth(rng) {
+  const roll = rng.float()
+  if (roll < 0.15) return rng.int(16, 26)
+  if (roll < 0.45) return rng.int(9, 15)
+  if (roll < 0.80) return rng.int(3, 8)
+  return rng.int(0, 2)
+}
+
+/** Potenziale residuo dei senior: più giovani sono, più margine hanno. */
+function seniorGrowth(rng, age) {
+  if (age <= 19) return rng.int(6, 24)
+  if (age <= 23) return rng.int(4, 16)
+  if (age <= 27) return rng.int(1, 8)
+  return rng.int(0, 3)
+}
+
 function buildPlayer(club, rng, role, index) {
   const youth = index.youth
   const tierBonus = youth
@@ -133,18 +154,8 @@ function buildPlayer(club, rng, role, index) {
 
   const age = youth ? rng.int(16, 18) : Math.round(clamp(rng.gauss(25.5, 4.5), 17, 38))
 
-  let potential
-  if (youth) {
-    // Non tutti i giovani diventano campioni: 12% gemme vere,
-    // 28% buoni giocatori, 60% gregari o delusioni (potenziale anche
-    // pari all'attuale: crescita zero).
-    const r = rng.float()
-    const draw = r < 0.12 ? rng.int(84, 95) : r < 0.40 ? rng.int(72, 84) : rng.int(56, 74)
-    potential = Math.max(ovr, draw)
-  } else {
-    const growth = age <= 19 ? rng.int(6, 24) : age <= 23 ? rng.int(4, 16) : age <= 27 ? rng.int(1, 8) : rng.int(0, 3)
-    potential = clamp(ovr + growth, ovr, 95)
-  }
+  const growth = youth ? youthGrowth(rng) : seniorGrowth(rng, age)
+  const potential = clamp(ovr + growth, ovr, 95)
 
   const ageFactor = age <= 21 ? 1.3 : age <= 25 ? 1.15 : age <= 29 ? 1 : age <= 32 ? 0.7 : 0.45
   const rawValue = Math.pow(1.17, ovr - 50) * 120000 * ageFactor * (1 + (potential - ovr) * 0.03)
