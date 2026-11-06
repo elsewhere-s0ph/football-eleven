@@ -8,26 +8,9 @@ import {
   IT_FIRST, IT_LAST, FOREIGN_POOLS, TOPONYMS, CLUB_PATTERNS,
   COLOR_PAIRS, TRADE_NICKS, STADIUM_NAMES, FIXED_CLUBS,
 } from './names'
+import { FIELD_PROFILE, GK_PROFILE, deriveOvr } from './attributes'
 
 export const SEASON = 2026
-
-/* ---------------- Profili attributi (media, deviazione) ---------------- */
-
-const FIELD_PROFILE = {
-  DF: { pace: [66, 8], shooting: [45, 8], passing: [62, 7], dribbling: [55, 7], defending: [74, 7], physical: [72, 7] },
-  MF: { pace: [68, 8], shooting: [62, 8], passing: [75, 7], dribbling: [72, 7], defending: [58, 8], physical: [66, 7] },
-  FW: { pace: [76, 8], shooting: [74, 7], passing: [64, 7], dribbling: [76, 7], defending: [38, 6], physical: [64, 7] },
-}
-const GK_PROFILE = {
-  reflexes: [74, 6], diving: [73, 6], handling: [70, 6],
-  positioning: [71, 6], kicking: [66, 7], speed: [60, 7],
-}
-const OVR_WEIGHTS = {
-  GK: { reflexes: 0.3, diving: 0.25, handling: 0.2, positioning: 0.15, kicking: 0.1 },
-  DF: { defending: 0.3, physical: 0.2, pace: 0.15, passing: 0.15, dribbling: 0.1, shooting: 0.1 },
-  MF: { passing: 0.3, dribbling: 0.2, defending: 0.15, pace: 0.15, shooting: 0.1, physical: 0.1 },
-  FW: { shooting: 0.3, dribbling: 0.25, pace: 0.2, passing: 0.1, physical: 0.1, defending: 0.05 },
-}
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v))
 const roundTo = (v, step) => Math.round(v / step) * step
@@ -141,23 +124,22 @@ function seniorGrowth(rng, age) {
 function buildPlayer(club, rng, role, index) {
   const youth = index.youth
   const tierBonus = youth
-    ? rng.int(52, 64) - 68
-    : 44 + club.reputation * 0.4 + rng.int(-5, 5) - 68
+    ? (rng.int(52, 64) - 68) / 5
+    : (44 + club.reputation * 0.4 + rng.int(-5, 5) - 68) / 5
 
   let attributes = {}
   if (role === 'GK') {
     for (const [k, [m, s]] of Object.entries(GK_PROFILE)) {
-      attributes[k] = Math.round(clamp(rng.gauss(m + tierBonus, s), 20, 99))
+      attributes[k] = Math.round(clamp(rng.gauss(m + tierBonus, s), 1, 20))
     }
   } else {
     for (const [k, [m, s]] of Object.entries(FIELD_PROFILE[role])) {
-      attributes[k] = Math.round(clamp(rng.gauss(m + tierBonus, s), 20, 99))
+      attributes[k] = Math.round(clamp(rng.gauss(m + tierBonus, s), 1, 20))
     }
   }
 
-  let ovr = 0
-  for (const [k, w] of Object.entries(OVR_WEIGHTS[role])) ovr += attributes[k] * w
-  ovr = Math.round(clamp(ovr, 30, 95))
+  // L'OVR è derivato: media pesata per ruolo sugli attributi, mai un numero a sé.
+  const ovr = deriveOvr(attributes, role)
 
   const age = youth ? rng.int(16, 18) : Math.round(clamp(rng.gauss(25.5, 4.5), 17, 38))
 
