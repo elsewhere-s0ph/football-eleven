@@ -6,6 +6,7 @@ import { computeStandings } from '../game/standings'
 import { simulateMatch, matchSeed } from '../game/engine'
 import MatchScreen from './MatchScreen'
 import PlayerCard from './PlayerCard'
+import TransferMarket from './TransferMarket'
 import pkg from '../../package.json'
 
 const ROLE_LABELS = { GK: 'Portieri', DF: 'Difensori', MF: 'Centrocampisti', FW: 'Attaccanti' }
@@ -14,6 +15,7 @@ const DURATIONS = { short: 'Compressa (1-2 min)', normal: 'Rilassata (5-6 min)',
 const TABS = [
   { id: 'home', label: 'Home' },
   { id: 'squad', label: 'Rosa' },
+  { id: 'market', label: 'Mercato' },
   { id: 'calendar', label: 'Calendario' },
   { id: 'club', label: 'Club' },
   { id: 'settings', label: 'Opzioni' },
@@ -334,6 +336,17 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
             <h3 className="mb-2 text-sm uppercase tracking-wider text-teal-400">Primavera</h3>
             <SquadList list={youth} season={career.season} round={round} onOpen={setCardPlayer} />
           </div>
+        )}
+
+        {tab === 'market' && (
+          <TransferMarket
+            career={career}
+            userClub={userClub}
+            clubs={clubs}
+            players={players}
+            next={next}
+            onDone={() => load(career.id)}
+          />
         )}
 
         {tab === 'calendar' && (
