@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pitchtory — Logo Kit</title>
+  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root { color-scheme: dark; }
+    body { margin: 0; background: #050d08; color: #e9f1eb; font-family: system-ui, sans-serif; padding: 32px 16px 64px; }
+    .wrap { max-width: 960px; margin: 0 auto; }
+    .kicker { font-family: Oswald, sans-serif; letter-spacing: 0.35em; font-size: 11px; color: #efbf4e; text-transform: uppercase; }
+    h1 { font-family: Oswald, sans-serif; font-weight: 600; letter-spacing: 3px; font-size: 34px; margin: 6px 0 4px; }
+    .sub { color: #7e9488; font-size: 14px; margin-bottom: 28px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+    .card { background: #0a1710; border: 1px solid #1b3327; border-radius: 16px; padding: 16px; text-align: center; }
+    .card.light { background: #f2f6f1; border-color: #c8d4cc; }
+    .card img { max-width: 100%; height: auto; margin: 8px 0; }
+    .card .mono { color: #e9f1eb; }
+    .card.light .mono { color: #0a1710; }
+    h2 { font-family: Oswald, sans-serif; letter-spacing: 2px; font-size: 17px; margin: 2px 0 10px; font-weight: 600; }
+    button { background: #2fb56e; border: 0; color: #050d08; font-weight: 700; border-radius: 8px; padding: 7px 12px; margin: 3px; font-size: 13px; cursor: pointer; }
+    button:hover { background: #47d489; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <p class="kicker">Little Elsewhere presenta</p>
+    <h1>PITCHTORY — LOGO KIT</h1>
+    <p class="sub">Notte di Divisione d&apos;Onore — verde notte #050d08 · erba illuminata #2fb56e · oro riflettore #efbf4e · gesso #f2f6f1.</p>
+    <div class="grid">
+      <div class="card">
+        <h2>CREST</h2>
+        <img src="/src/assets/crest.svg" alt="Crest" width="220" />
+        <div><button data-src="/src/assets/crest.svg" data-size="512">PNG 512</button><button data-src="/src/assets/crest.svg" data-size="1024">PNG 1024</button></div>
+      </div>
+      <div class="card">
+        <h2>CREST MONO</h2>
+        <div class="mono"><img src="/src/assets/crest-mono.svg" alt="Crest monocromo" width="220" /></div>
+        <div><button data-src="/src/assets/crest-mono.svg" data-size="512">PNG 512</button></div>
+      </div>
+      <div class="card">
+        <h2>WORDMARK</h2>
+        <img src="/src/assets/wordmark.svg" alt="Wordmark" width="260" />
+        <div><button data-src="/src/assets/wordmark.svg" data-size="920">PNG 920</button></div>
+      </div>
+      <div class="card">
+        <h2>ICONA APP (maskable)</h2>
+        <img src="/src/assets/icon.svg" alt="Icona" width="180" style="border-radius:36px" />
+        <div><button data-src="/src/assets/icon.svg" data-size="512">PNG 512</button><button data-src="/src/assets/icon.svg" data-size="192">PNG 192</button></div>
+      </div>
+      <div class="card">
+        <h2>FAVICON</h2>
+        <img src="/src/assets/favicon.svg" alt="Favicon" width="72" />
+        <div><button data-src="/src/assets/favicon.svg" data-size="64">PNG 64</button><button data-src="/src/assets/favicon.svg" data-size="32">PNG 32</button></div>
+      </div>
+      <div class="card light">
+        <h2>CREST SU CHIARO</h2>
+        <div class="mono" style="color:#0a1710"><img src="/src/assets/crest-mono.svg" alt="Crest monocromo su fondo chiaro" width="200" /></div>
+      </div>
+    </div>
+    <p class="sub" style="margin-top:24px">Snippet favicon: &lt;link rel="icon" type="image/svg+xml" href="/favicon.svg" /&gt; — le PNG si esportano da qui e si caricano a mano nel repo (il push binario via API corrompe le immagini).</p>
+  </div>
+  <script>
+    async function exportPng(src, size) {
+      const res = await fetch(src)
+      const svgText = await res.text()
+      const blobUrl = URL.createObjectURL(new Blob([svgText], { type: "image/svg+xml" }))
+      const img = new Image()
+      img.onload = function () {
+        const canvas = document.createElement("canvas")
+        canvas.width = size
+        canvas.height = size
+        const ctx = canvas.getContext("2d")
+        ctx.drawImage(img, 0, 0, size, size)
+        URL.revokeObjectURL(blobUrl)
+        const a = document.createElement("a")
+        a.href = canvas.toDataURL("image/png")
+        a.download = "pitchtory-" + src.split("/").pop().replace(".svg", "") + "-" + size + ".png"
+        a.click()
+      }
+      img.src = blobUrl
+    }
+    document.querySelectorAll("button[data-src]").forEach(function (b) {
+      b.addEventListener("click", function () { exportPng(b.dataset.src, Number(b.dataset.size)) })
+    })
+  </script>
+</body>
+</html>
