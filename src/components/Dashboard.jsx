@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useCareer } from '../store'
 import { deleteCareer, exportCareer, importCareer, listCareers, updateCareerSettings } from '../db'
+import { scoutedPotential } from '../game/scouting'
 
 const ROLE_LABELS = { GK: 'Portieri', DF: 'Difensori', MF: 'Centrocampisti', FW: 'Attaccanti' }
 const ROLE_ORDER = ['GK', 'DF', 'MF', 'FW']
@@ -21,21 +22,27 @@ function fmtMoney(v) {
 
 function MoraleDot({ value }) {
   const color = value >= 75 ? 'bg-emerald-500' : value >= 55 ? 'bg-amber-500' : 'bg-red-500'
-  return <span className={'inline-block h-2.5 w-2.5 shrink-0 rounded-full ' + color} title={'Morale ' + value} />
+  return <span className={'inline-block h-2.5 w-2.5 rounded-full ' + color} title={'Morale ' + value} />
 }
 
+/** Colonne a larghezza fissa: ogni riga allineata con le altre. */
 function PlayerRow({ p, season }) {
   return (
-    <li className="flex items-center gap-3 px-3 py-2 text-sm">
-      <span className="w-7 text-center font-bold text-teal-400">{p.ovr}</span>
-      <span className="flex-1 truncate">{p.name}</span>
-      <MoraleDot value={p.morale} />
-      <span className="hidden w-24 truncate text-xs text-slate-400 sm:block">{p.personality}</span>
-      <span className="text-xs text-slate-400">{p.age}a</span>
-      <span className="w-16 text-right text-xs text-slate-400">{fmtMoney(p.value)}</span>
-      {p.contractUntil <= season + 1 && (
-        <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] text-amber-400">Scade</span>
-      )}
+    <li className="flex items-center gap-2 px-3 py-2 text-sm">
+      <span className="w-7 shrink-0 text-center font-bold text-teal-400">{p.ovr}</span>
+      <span className="min-w-0 flex-1 truncate">{p.name}</span>
+      <span className="flex w-14 shrink-0 items-center justify-end gap-1.5">
+        <MoraleDot value={p.morale} />
+        <span className="text-xs text-slate-400">{p.morale}</span>
+      </span>
+      <span className="hidden w-24 shrink-0 truncate text-xs text-slate-400 sm:block">{p.personality}</span>
+      <span className="w-8 shrink-0 text-right text-xs text-slate-400">{p.age}a</span>
+      <span className="w-16 shrink-0 text-right text-xs text-slate-400">{fmtMoney(p.value)}</span>
+      <span className="w-12 shrink-0 text-right">
+        {p.contractUntil <= season + 1 && (
+          <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] text-amber-400">Scade</span>
+        )}
+      </span>
     </li>
   )
 }
@@ -110,6 +117,10 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
   const avgMorale = squad.length ? Math.round(squad.reduce((s, p) => s + p.morale, 0) / squad.length) : 0
   const wageBill = squad.reduce((s, p) => s + p.wage, 0)
   const next = userFixtures.find((f) => !f.played)
+  const staffLevel = userClub.facilities.staffLevel
+  const youthRanked = youth
+    .slice()
+    .sort((a, b) => scoutedPotential(b, staffLevel) - scoutedPotential(a, staffLevel))
 
   async function handleExport() {
     const json = await exportCareer(career.id)
@@ -181,7 +192,7 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
                 <li>Media squadra: <b>{userClub.avgOvr}</b></li>
                 <li>Morale rosa: <b>{avgMorale}</b></li>
                 <li>Budget: <b>{fmtMoney(userClub.budget)}</b></li>
-                <li>Stipendi: <b>{fmtMoney(wageBill)}</b>/anno</li>
+                <li>Stipendi: <b>{fmtMoney(wageBill)}</b></li>
               </ul>
             </Card>
           </div>
@@ -227,17 +238,23 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
             </Card>
             <Card title={'Primavera (' + youth.length + ')'}>
               <ul className="space-y-1.5">
-                {youth.sort((a, b) => b.potential - a.potential).map((p) => (
+                {youthRanked.map((p) => (
                   <li key={p.id} className="flex items-center gap-2 text-sm">
-                    <span className="w-6 text-center font-bold text-teal-400">{p.ovr}</span>
-                    <span className="flex-1 truncate">{p.name}</span>
-                    <span className="text-xs text-slate-400">{p.age}a</span>
-                    <span className={'text-xs ' + (p.potential - p.ovr >= 16 ? 'font-bold text-teal-400' : 'text-slate-400')}>
-                      pot {p.potential}
+                    <span className="w-7 shrink-0 text-center font-bold text-teal-400">{p.ovr}</span>
+                    <span className="min-w-0 flex-1 truncate">{p.name}</span>
+                    <span className="w-8 shrink-0 text-right text-xs text-slate-400">{p.age}a</span>
+                    <span
+                      className="w-14 shrink-0 text-right text-xs text-teal-400"
+                      title="Stima del tuo staff: staff migliore, lettura più precisa"
+                    >
+                      ~{scoutedPotential(p, staffLevel)}
                     </span>
                   </li>
                 ))}
               </ul>
+              <p className="mt-3 text-xs text-slate-500">
+                Il potenziale dei giovani è una stima (~) del tuo staff: non tutti i giovani diventano campioni, e il tuo staff non sbaglia mai per caso due volte.
+              </p>
             </Card>
           </div>
         )}
