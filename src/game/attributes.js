@@ -32,7 +32,7 @@ export const OVR_WEIGHTS = {
 /** Profili per ruolo (media e deviazione, scala 1-20). */
 export const FIELD_PROFILE = {
   DF: { pace: [13.2, 1.6], shooting: [9, 1.6], passing: [12.4, 1.4], dribbling: [11, 1.4], defending: [14.8, 1.4], physical: [14.4, 1.4] },
-  MF: { pace: [13.6, 1.6], shooting: [12.4, 1.6], passing: [15, 1.4], dribbling: [14.4, .4], defending: [11.6, 1.6], physical: [13.2, 1.4] },
+  MF: { pace: [13.6, 1.6], shooting: [12.4, 1.6], passing: [15, 1.4], dribbling: [14.4, 1.4], defending: [11.6, 1.6], physical: [13.2, 1.4] },
   FW: { pace: [15.2, 1.6], shooting: [14.8, 1.4], passing: [12.8, 1.4], dribbling: [15.2, 1.4], defending: [7.6, 1.2], physical: [12.8, 1.4] },
 }
 export const GK_PROFILE = {

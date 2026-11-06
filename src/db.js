@@ -3,6 +3,7 @@ import { generateUniverse, playerValue } from './game/universe'
 import { generateSchedule } from './game/schedule'
 import { computeStandings } from './game/standings'
 import { seasonGrowth } from './game/progression'
+import { deriveOvr, migrateAttrs, rollAttrsForOvr, growAttrs, declineAttrs } from './game/attributes'
 import { Rng, seedFromString } from './lib/rng'
 
 const PERSONALITIES = ['Leader', 'Professionista', 'Temperamentale', 'Sognatore', 'Grintoso', 'Pacato']
@@ -70,8 +71,12 @@ export async function createCareer({ seed, seedText, coachName, clubId, matchDur
   return careerId
 }
 
-/** Carica una carriera completa. Le righe conservano key e careerId
- * (servono per aggiornare i risultati senza rilizzare il database). */
+/**
+ * Carica una carriera completa. Le righe conservano key e careerId.
+ * Migrazione lazy (v0.9): chi non ha gli attributi in scala 1-20 li riceve
+ * qui, deterministi dal seed e centrati sull'OVR attuale — la carriera
+ * continua identica a come l'hai lasciata.
+ */
 export async function loadCareer(id) {
   const career = await db.careers.get(id)
   const [clubs, players, fixtures] = await Promise.all([
@@ -79,6 +84,21 @@ export async function loadCareer(id) {
     db.players.where('careerId').equals(id).toArray(),
     db.fixtures.where('careerId').equals(id).toArray(),
   ])
+
+  const stale = (p) => !p.attributes || Object.values(p.attributes).some((v) => v > 20)
+  const toMigrate = players.filter(stale)
+  if (toMigrate.length) {
+    await db.transaction('rw', db.players, async () => {
+      for (const p of toMigrate) {
+        const rng = new Rng(seedFromString(career.seed + ':' + p.id + ':attrs'))
+        p.attributes = p.attributes
+          ? migrateAttrs(p.attributes, p.role, p.ovr)
+          : rollAttrsForOvr(rng, p.ovr, p.role)
+        if (p.key) await db.players.update(p.key, { attributes: p.attributes })
+      }
+    })
+  }
+
   return { career, clubs, players, fixtures }
 }
 
@@ -163,9 +183,9 @@ export async function applyAiMatchday(fixture, events, allPlayers) {
 
 /**
  * Chiude la stagione: assegna il titolo, fa crescere (o invecchiare) i
- * giocatori, promuove i Primavera che compiono 19 anni, azzera le
- * statistiche, guarisce gli infortuni e genera il calendario nuovo.
- * Deterministica dal seed: stessa carriera, stesso futuro.
+ * giocatori attributo per attributo, promuove i Primavera che compiono
+ * 19 anni, azzera le statistiche, guarisce gli infortuni e genera il
+ * calendario nuovo. Deterministica dal seed: stessa carriera, stesso futuro.
  * Ritorna il riepilogo per la schermata di fine stagione.
  */
 export async function endSeason(careerId) {
@@ -208,11 +228,22 @@ export async function endSeason(careerId) {
       const youthLevel = (club && club.facilities && club.facilities.youthLevel) || 1
       const rng = new Rng(seedFromString(baseSeed + p.id))
       const growth = seasonGrowth(rng, p, youthLevel)
-      const ovr = growth > 0 ? Math.min(p.ovr + growth, p.potential) : p.ovr + growth
       const age = p.age + 1
+      const target = growth > 0 ? Math.min(p.ovr + growth, p.potential) : p.ovr + growth
+      let ovr = target
+      let attributes = p.attributes
+      if (attributes) {
+        attributes = growth > 0
+          ? growAttrs(attributes, p.role, target, rng)
+          : growth < 0
+            ? declineAttrs(attributes, p.role, target, rng)
+            : attributes
+        ovr = deriveOvr(attributes, p.role)
+      }
       const updates = {
         ovr,
         age,
+        attributes,
         youth: p.youth && age < 19,
         value: playerValue(ovr, age, p.potential),
         apps: 0,
@@ -226,6 +257,7 @@ export async function endSeason(careerId) {
         else summary.declined.push(entry)
       }
       p.ovr = ovr
+      p.attributes = attributes
       if (p.key) await db.players.update(p.key, updates)
     }
 
