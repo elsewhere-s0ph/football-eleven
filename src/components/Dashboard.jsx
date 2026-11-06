@@ -302,7 +302,7 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
                   <li>Morale rosa: <b>{avgMorale}</b></li>
                   <li>Infortunati: <b className={injuredCount ? 'text-red-400' : ''}>{injuredCount}</b></li>
                   <li>Budget: <b>{fmtMoney(userClub.budget)}</b></li>
-                  <li>Stipendi: <b>{fmtMoney(wageBill)}</b></li>
+                  <li>Stipendi: <b>{fmtMoney(wageBill)}</b>/anno</li>
                 </ul>
               </Card>
             </div>
@@ -346,7 +346,7 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
             <Card title="Finanze e strutture">
               <ul className="mb-3 space-y-1 text-sm text-slate-300">
                 <li>Budget trasferimenti: <b>{fmtMoney(userClub.budget)}</b></li>
-                <li>Stipendi rosa: <b>{fmtMoney(wageBill)}</b></li>
+                <li>Stipendi rosa: <b>{fmtMoney(wageBill)}</b>/anno</li>
                 <li>Stadio: <b>{userClub.stadium.name}</b> ({userClub.stadium.capacity.toLocaleString('it-IT')} posti)</li>
               </ul>
               <div className="space-y-1.5">
@@ -479,7 +479,7 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
                   </li>
                 ))}
                 {!seasonSummary.declined.length && (
-                  <li className="text-slate-500">Nessuno: la squadra sta ancora aspettando i trent'anni.</li>
+                  <li className="text-slate-500">Nessuno: la류 sta ancora aspettando i trent'anni.</li>
                 )}
               </ul>
             </div>

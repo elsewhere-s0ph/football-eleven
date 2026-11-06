@@ -45,7 +45,7 @@ React · Vite · Tailwind CSS · Dexie (IndexedDB) · Zustand · PRNG con seed (
 
 - [x] F0 — Fondazioni: scaffold, Dexie, PRNG, CI
 - [x] F1 — Generatori dell'universo fittizio
-- [x] F2 — Data model & gestione (carriere, contratti, moduli, giovanili)
+- [x] F2 — Data model & gestione (carriere, contratti, morale, giovanili)
 - [x] F3 — Motore partite live, QTE, sostituzioni, infortuni, progressione, fine stagione
 - [ ] F4 — Mercato
 - [ ] F5 — Abilità Speciali
