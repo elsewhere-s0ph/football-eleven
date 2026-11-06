@@ -109,7 +109,8 @@ export async function saveFixtureResults(results) {
 /**
  * Post-partita della squadra dell'utente: morale (+5/-5/+1, +2 ai marcatori),
  * statistiche stagionali (presenze, minuti, gol) e infortuni di entrambe
- * le squadre (injuredUntil = giornate di stop, inclusa quella corrente).
+ * le squadre (infortunati di entrambe le squadre, injuredUntil = giornate
+ * di stop, inclusa quella corrente).
  */
 export async function applyPostMatch(careerId, fixture, result, userClubId, userPlayers, allPlayers) {
   const isHome = fixture.homeId === userClubId
@@ -148,7 +149,7 @@ export async function applyPostMatch(careerId, fixture, result, userClubId, user
   })
 }
 
-/** Infortuni delle partite simulate in background: la lega soffice quanto te. */
+/** Infortuni delle partite simulate in background: la lega soffrice quanto te. */
 export async function applyAiMatchday(fixture, events, allPlayers) {
   const byId = new Map((allPlayers || []).map((p) => [p.id, p]))
   const injuries = events.filter((e) => e.type === 'injury' && e.playerId && e.weeks)
@@ -200,7 +201,7 @@ export async function endSeason(careerId) {
     })
   }
 
-  await db.transaction('rw', db.careers, db.players, db.fixtures, async () => {
+  await db.transaction('rw', db.careers, db.clubs, db.players, db.fixtures, async () => {
     for (const p of players) {
       const club = clubById[p.clubId]
       const youthLevel = (club && club.facilities && club.facilities.youthLevel) || 1
@@ -227,9 +228,9 @@ export async function endSeason(careerId) {
       if (p.key) await db.players.update(p.key, updates)
     }
 
-    // Media OVR aggiornata per ogni club (i Primavera promossi contano come senior).
+    // Media OVR aggiornata per ogni club (i Primavera promossi contano).
     for (const c of clubs) {
-      const list = players.filter((p) => p.clubId === c.id && !(p.youth && p.age + 1 < 19))
+      const list = players.filter((p) => p.clubId === c.id && !p.youth)
       const avg = list.length ? Math.round(list.reduce((s, p) => s + p.ovr, 0) / list.length) : c.avgOvr
       if (c.key) await db.clubs.update(c.key, { avgOvr: avg })
     }
