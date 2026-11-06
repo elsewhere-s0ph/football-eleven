@@ -109,8 +109,7 @@ export async function saveFixtureResults(results) {
 /**
  * Post-partita della squadra dell'utente: morale (+5/-5/+1, +2 ai marcatori),
  * statistiche stagionali (presenze, minuti, gol) e infortuni di entrambe
- * le squadre (infortunati di entrambe le squadre, injuredUntil = giornate
- * di stop, inclusa quella corrente).
+ * le squadre (injuredUntil = giornate di stop, inclusa quella corrente).
  */
 export async function applyPostMatch(careerId, fixture, result, userClubId, userPlayers, allPlayers) {
   const isHome = fixture.homeId === userClubId
@@ -201,6 +200,8 @@ export async function endSeason(careerId) {
     })
   }
 
+  // NB: clubs serve dentro la transazione (media OVR): ometterlo dallo
+  // scope fa fallire tutta la transazione su Dexie.
   await db.transaction('rw', db.careers, db.clubs, db.players, db.fixtures, async () => {
     for (const p of players) {
       const club = clubById[p.clubId]
@@ -228,9 +229,10 @@ export async function endSeason(careerId) {
       if (p.key) await db.players.update(p.key, updates)
     }
 
-    // Media OVR aggiornata per ogni club (i Primavera promossi contano).
+    // Media OVR aggiornata per ogni club (i Primavera promossi a 19 anni
+    // contano già come senior).
     for (const c of clubs) {
-      const list = players.filter((p) => p.clubId === c.id && !p.youth)
+      const list = players.filter((p) => p.clubId === c.id && !(p.youth && p.age + 1 < 19))
       const avg = list.length ? Math.round(list.reduce((s, p) => s + p.ovr, 0) / list.length) : c.avgOvr
       if (c.key) await db.clubs.update(c.key, { avgOvr: avg })
     }
