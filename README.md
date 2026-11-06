@@ -27,7 +27,7 @@ Motore di simulazione tick-based con gol Poisson guidati dalla forza delle squad
 
 ## Attributi e schede giocatore (F3.5)
 
-Ogni calciatore ha **8 attributi in scala 1-20** — Velocità, Resistenza... no: Velocità, Tiro, Passaggio, Dribbling, Contrasto e Fisico per gli outfield; Riflessi, Tuffi, Presa, Posizione, Rinvii e Velocità per i portieri. L'**OVR non esiste più come numero a sé: è derivato**, media pesata per ruolo (il Contrasto pesa il 30% per un difensore, il Tiro il 30% per un attaccante). Tappa un nome nella Rosa e si apre la scheda: barre degli attributi, contratto, morale, statistiche di stagione e — per la Primavera — la stima del potenziale da parte del tuo staff.
+Ogni calciatore ha **6 attributi in scala 1-20** — Velocità, Tiro, Passaggio, Dribbling, Contrasto e Fisico per gli uomini di movimento; Riflessi, Tuffi, Presa, Posizione, Rinvii e Velocità per i portieri. L'**OVR non esiste più come numero a sé: è derivato**, media pesata per ruolo (il Contrasto pesa il 30% per un difensore, il Tiro il 30% per un attaccante). Tappa un nome nella Rosa e si apre la scheda: barre degli attributi, contratto, morale, statistiche di stagione e — per la Primavera — la stima del potenziale da parte del tuo staff.
 
 **Crescita attributo per attributo**: le percentuali di progressione muovono i singoli attributi, non un OVR astratto. Chi gioca di più allena gli attributi che contano per il suo ruolo; il declino over-30 colpisce prima Velocità e Fisico — il 33enne che perde lo scatto, come nella vita. Le carriere esistenti vengono migrate al volo al primo caricamento, deterministica dal seed e centrata sull'OVR attuale: la tua stagione continua identica.
 
