@@ -19,6 +19,15 @@ function fmtMoney(v) {
   return '€' + Math.round(v / 1000) + 'k'
 }
 
+function fmtMillions(v) {
+  return (v / 1000000).toFixed(2).replace('.', ',') + ' M€'
+}
+
+function parseMillions(str) {
+  const n = parseFloat(String(str).replace(',', '.'))
+  return Number.isFinite(n) ? n : 0
+}
+
 function ovrClass(ovr) {
   if (ovr >= 80) return 'bg-teal-400/15 text-teal-300'
   if (ovr >= 70) return 'bg-pitch-700 text-pitch-100'
@@ -127,7 +136,7 @@ export default function TransferMarket({ career, userClub, clubs, players, next,
   function openBuy(p) {
     setMode('buy')
     setSheet(p)
-    setOfferInput(String(askingById[p.id] || 0))
+    setOfferInput(((askingById[p.id] || 0) / 1000000).toFixed(2).replace('.', ','))
     setResponse(null)
     setBid(null)
   }
@@ -141,7 +150,7 @@ export default function TransferMarket({ career, userClub, clubs, players, next,
 
   function propose() {
     if (!sheet) return
-    const offer = Math.round(parseInt(offerInput, 10) || 0)
+    const offer = Math.round(parseMillions(offerInput) * 1000000)
     const asking = askingById[sheet.id] || 0
     setResponse(respondToOffer(offer, asking, seniorsByClub[sheet.clubId] || 0))
   }
@@ -152,7 +161,7 @@ export default function TransferMarket({ career, userClub, clubs, players, next,
     try {
       const contractUntil = boughtContract(career.seed, career.season, sheet)
       await transferPlayer(career.id, sheet.key, clubById[sheet.clubId].key, userClub.key, fee, contractUntil)
-      setNotice({ ok: true, text: 'Acquisto chiuso: ' + sheet.name + ' per ' + fmtMoney(fee) + '.' })
+      setNotice({ ok: true, text: 'Acquisto chiuso: ' + sheet.name + ' per ' + fmtMillions(fee) + '.' })
       closeSheet()
       await onDone()
     } catch (err) {
@@ -174,7 +183,7 @@ export default function TransferMarket({ career, userClub, clubs, players, next,
     setBusy(true)
     try {
       await transferPlayer(career.id, sheet.key, userClub.key, bid.club.key, bid.fee, boughtContract(career.seed, career.season, sheet))
-      setNotice({ ok: true, text: sheet.name + ' lascia il club: ' + fmtMoney(bid.fee) + ' da ' + bid.club.name + '.' })
+      setNotice({ ok: true, text: sheet.name + ' lascia il club: ' + fmtMillions(bid.fee) + ' da ' + bid.club.name + '.' })
       closeSheet()
       await onDone()
     } catch (err) {
@@ -185,7 +194,7 @@ export default function TransferMarket({ career, userClub, clubs, players, next,
   }
 
   const sheetClub = sheet ? clubById[sheet.clubId] : null
-  const offerValue = Math.round(parseInt(offerInput, 10) || 0)
+  const offerValue = Math.round(parseMillions(offerInput) * 1000000)
   const overBudget = offerValue > userClub.budget
 
   if (!marketWindow) {
@@ -324,7 +333,7 @@ export default function TransferMarket({ career, userClub, clubs, players, next,
             {mode === 'buy' ? (
               <div className="space-y-3">
                 <p className="text-sm text-pitch-300">
-                  Prezzo richiesto: <span className="font-bold text-teal-300">{fmtMoney(askingById[sheet.id] || 0)}</span>
+                  Prezzo richiesto: <span className="font-bold text-teal-300">{fmtMillions(askingById[sheet.id] || 0)}</span>
                   {' · '}Stipendio: {fmtMoney(sheet.wage || 0)}/stagione
                 </p>
                 {isBuyDisabled ? (
@@ -333,17 +342,16 @@ export default function TransferMarket({ career, userClub, clubs, players, next,
                   </p>
                 ) : (
                   <>
-                    <label className="block text-xs text-pitch-400">La tua offerta (€)</label>
+                    <label className="block text-xs text-pitch-400">La tua offerta, in milioni (0,01 M€ = 10.000 €)</label>
                     <input
-                      type="number"
-                      min="0"
-                      step="10000"
+                      type="text"
+                      inputMode="decimal"
                       value={offerInput}
                       onChange={(e) => { setOfferInput(e.target.value); setResponse(null) }}
                       className="w-full rounded-xl border border-pitch-700 bg-pitch-950 px-3 py-2 text-sm text-pitch-100"
                     />
                     {overBudget ? (
-                      <p className="text-xs text-red-300">Sfori il budget: hai {fmtMoney(userClub.budget)}.</p>
+                      <p className="text-xs text-red-300">Sfori il budget: hai {fmtMillions(userClub.budget)}.</p>
                     ) : null}
 
                     {!response ? (
@@ -363,21 +371,21 @@ export default function TransferMarket({ career, userClub, clubs, players, next,
                           onClick={() => completeBuy(response.fee)}
                           disabled={busy}
                           className="w-full rounded-xl bg-teal-400 px-3 py-2.5 text-sm font-bold text-pitch-950 disabled:opacity-40"
-                        >Completa l'acquisto · {fmtMoney(response.fee)}</button>
+                        >Completa l'acquisto · {fmtMillions(response.fee)}</button>
                       </div>
                     ) : null}
 
                     {response && response.status === 'counter' ? (
                       <div className="space-y-2">
                         <p className="rounded-xl border border-pitch-600 bg-pitch-800 p-3 text-sm text-pitch-200">
-                          {'Non si muove di un centesimo: ' + fmtMoney(response.counter) + ' e non se ne parla.'}
+                          {'Non si muove di un centesimo: ' + fmtMillions(response.counter) + ' e non se ne parla.'}
                         </p>
                         <div className="flex gap-2">
                           <button
                             onClick={() => completeBuy(response.counter)}
                             disabled={busy || response.counter > userClub.budget}
                             className="flex-1 rounded-xl bg-teal-400 px-3 py-2.5 text-sm font-bold text-pitch-950 disabled:opacity-40"
-                          >{'Paga ' + fmtMoney(response.counter)}</button>
+                          >{'Paga ' + fmtMillions(response.counter)}</button>
                           <button onClick={closeSheet} className="flex-1 rounded-xl border border-pitch-700 px-3 py-2.5 text-sm font-semibold text-pitch-300">Ritirati</button>
                         </div>
                       </div>
@@ -394,7 +402,7 @@ export default function TransferMarket({ career, userClub, clubs, players, next,
             ) : (
               <div className="space-y-3">
                 <p className="text-sm text-pitch-300">
-                  Valore di mercato: <span className="font-bold text-teal-300">{fmtMoney(sheet.value)}</span>
+                  Valore di mercato: <span className="font-bold text-teal-300">{fmtMillions(sheet.value)}</span>
                 </p>
                 {isSellDisabled ? (
                   <p className="rounded-xl border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-200">
@@ -416,7 +424,7 @@ export default function TransferMarket({ career, userClub, clubs, players, next,
                 ) : (
                   <div className="space-y-2">
                     <p className="rounded-xl border border-teal-400/30 bg-teal-400/10 p-3 text-sm text-teal-200">
-                      {bid.club.name + ' offre ' + fmtMoney(bid.fee) + '.'}
+                      {bid.club.name + ' offre ' + fmtMillions(bid.fee) + '.'}
                     </p>
                     <div className="flex gap-2">
                       <button
