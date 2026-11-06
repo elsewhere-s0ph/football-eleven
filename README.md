@@ -2,7 +2,7 @@
 
 **Pitch + Victory.** Il football manager definitivo in formato PWA. Tutto client-side: nessun account, nessun server — la carriera vive sul tuo dispositivo.
 
-> Stato: Fase 3.5 completa — motore partite, QTE, sostituzioni, infortuni, evoluzione OVR, fine stagione, attributi 1-20 e schede giocatore. Prossima: F4 mercato.
+> Stato: Fase 4 completa — motore partite, QTE, sostituzioni, infortuni, attributi 1-20, schede giocatore, fine stagione e mercato. Prossima: F5 abilità speciali e osservatori.
 
 ## Sviluppo
 
@@ -31,6 +31,16 @@ Ogni calciatore ha **6 attributi in scala 1-20** — Velocità, Tiro, Passaggio,
 
 **Crescita attributo per attributo**: le percentuali di progressione muovono i singoli attributi, non un OVR astratto. Chi gioca di più allena gli attributi che contano per il suo ruolo; il declino over-30 colpisce prima Velocità e Fisico — il 33enne che perde lo scatto, come nella vita. Le carriere esistenti vengono migrate al volo al primo caricamento, deterministica dal seed e centrata sull'OVR attuale: la tua stagione continua identica.
 
+## Mercato (F4)
+
+Il calcio si compra e si vende, a finestre: **estiva** (prima della giornata 1) e **invernale** (tra la 19ª e la 20ª). Fuori da quelle, la tab Mercato racconta solo quando si riapre.
+
+**Comprare**: lista di tutta la lega con filtri per ruolo, ricerca per nome e ordinamenti (OVR, prezzo, età). Ogni club ha il suo **prezzo richiesto**: il valore di mercato più la riluttanza — i top della rosa costano, i contratti in scadenza si svenano, i prospetti si pagano sopra prezzo. Offri quello che vuoi: sotto l'80% del richiesto nemmeno rispondono; tra l'80% e il pieno contano il prezzo pieno; al pieno stringono la mano. Una trattativa, non un'asta — sempre deterministica: stessa offerta, stessa risposta.
+
+**Vendere**: metti un senior sul mercato e chiedi offerte: i club AI a cui manca proprio quel ruolo si fanno avanti (o no). Chi offre di più si prende il giocatore, il budget si aggiusta, la media OVR pure.
+
+**La lega vive**: a fine stagione anche i club AI si rinforzano tra loro con un loro mercato estivo. Guardie serie: rosa minima 16 senior per vendere, massima 30 per comprare. La Primavera non si tocca: cresce in silenzio.
+
 ## Stack
 
 React · Vite · Tailwind CSS · Dexie (IndexedDB) · Zustand · PRNG con seed (carriere deterministiche e condivisibili)
@@ -44,7 +54,7 @@ React · Vite · Tailwind CSS · Dexie (IndexedDB) · Zustand · PRNG con seed (
 - Attributi 1-20 come fonte di verità, OVR derivato per ruolo: la crescita e il declino si vedono punto per punto
 - Chi gioca migliora di più: la progressione dipende dai minuti, dall'età e dal potenziale nascosto
 - Gestione completa: mercato, contratti, morale, rapporti
-- Potenziale dei giovani mai rivelato: stima dello staff, sistema osservatori completo in F4/F5
+- Potenziale dei giovani mai rivelato: stima dello staff, sistema osservatori completo in F5
 - Abilità Speciali con rarità (comune → leggendaria)
 - Nomi fittizi credibili, niente cliché
 
@@ -55,8 +65,8 @@ React · Vite · Tailwind CSS · Dexie (IndexedDB) · Zustand · PRNG con seed (
 - [x] F2 — Data model & gestione (carriere, contratti, moduli, giovanili)
 - [x] F3 — Motore partite live, QTE, sostituzioni, infortuni, progressione, fine stagione
 - [x] F3.5 — Attributi 1-20, OVR derivato, schede giocatore
-- [ ] F4 — Mercato
-- [ ] F5 — Abilità Speciali
+- [x] F4 — Mercato: finestre estiva e invernale, trattative con controfferta, offerte AI, la lega che commercia
+- [ ] F5 — Abilità Speciali e osservatori
 - [ ] F6 — PWA completa (manifest, service worker, _headers, bilingue)
 - [ ] F7 — Capacitor (app vera)
 
