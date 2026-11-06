@@ -17,7 +17,7 @@ const STAMINA_DECAY = { GK: 0.35, DF: 0.75, MF: 0.9, FW: 0.85 }
 const FRESH_STAMINA = 97
 
 function eventClass(e) {
-  if (e.type === 'goal') return 'border-teal-500/40 bg-teal-500/10 font-semibold text-teal-200'
+  if (e.type === 'goal') return 'border-flood-400/50 bg-flood-400/10 font-semibold text-flood-200 shadow-[0_0_16px_rgba(239,191,78,0.15)]'
   if (e.type === 'red') return 'border-red-500/40 bg-red-500/10 text-red-300'
   if (e.type === 'injury') return 'border-red-500/30 bg-red-500/5 text-red-200/90'
   if (e.type === 'card') return 'border-amber-500/30 bg-amber-500/5 text-amber-200/80'
@@ -34,7 +34,7 @@ function TeamBadge({ club }) {
   return (
     <div className="max-w-[45%]">
       <span
-        className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full border border-slate-700"
+        className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full border border-slate-700 shadow-[0_0_18px_rgba(244,248,244,0.08)]"
         style={{ background: club.colors.primary }}
       />
       <p className="truncate text-sm font-semibold">{club.name}</p>
@@ -292,7 +292,7 @@ export default function MatchScreen({ fixture, onDone }) {
   return (
     <div className="fixed inset-0 z-10 overflow-y-auto bg-pitch-950">
       <div className="mx-auto max-w-2xl p-4 pb-10 sm:p-8">
-        <p className="text-center text-xs uppercase tracking-[0.3em] text-teal-400">
+        <p className="scoreboard text-center text-[10px] tracking-[0.35em] text-flood-400">
           Divisione d'Onore · Giornata {fixture.number}
         </p>
 
@@ -309,7 +309,7 @@ export default function MatchScreen({ fixture, onDone }) {
             <div className="mx-auto flex max-w-xs flex-col gap-2">
               <button
                 onClick={() => setPhase('live')}
-                className="rounded-lg bg-teal-500 py-3 text-sm font-semibold text-pitch-950 hover:bg-teal-400"
+                className="rounded-lg bg-teal-500 py-3 text-sm font-semibold text-pitch-950 shadow-[0_0_20px_rgba(47,181,110,0.25)] transition hover:bg-teal-400 hover:shadow-[0_0_28px_rgba(47,181,110,0.35)] active:scale-[0.98]"
               >
                 Fischio d'inizio
               </button>
@@ -325,15 +325,15 @@ export default function MatchScreen({ fixture, onDone }) {
 
         {(phase === 'live' || phase === 'qte') && (
           <div className="mt-6">
-            <div className="flex items-center justify-between gap-2 text-lg font-bold">
+            <div className="scoreboard flex items-center justify-between gap-2 text-base font-semibold">
               <span className="min-w-0 flex-1 truncate text-right">{home.name}</span>
-              <span className="shrink-0 rounded-lg bg-slate-800 px-3 py-1 tabular-nums">{hg}-{ag}</span>
+              <span key={hg + '-' + ag} className="animate-goal-flash shrink-0 rounded-lg border border-pitch-700 bg-pitch-800/80 px-4 py-1 text-2xl tabular-nums tracking-widest text-flood-300">{hg}-{ag}</span>
               <span className="min-w-0 flex-1 truncate">{away.name}</span>
             </div>
             <p className="mt-1 text-center text-xs text-slate-400">{minute} minuti · recupero incluso</p>
             <div className="mt-2 h-1 rounded bg-slate-800">
               <div
-                className="h-1 rounded bg-teal-500 transition-all"
+                className="h-1 rounded bg-teal-500 shadow-[0_0_8px_rgba(47,181,110,0.6)] transition-all"
                 style={{ width: (minute / FULL_TIME) * 100 + '%' }}
               />
             </div>
@@ -433,13 +433,13 @@ export default function MatchScreen({ fixture, onDone }) {
             )}
 
             {phase === 'qte' && pendingMoment && (
-              <div className="mt-4 rounded-xl border-2 border-amber-500/60 bg-pitch-900 p-4">
+              <div className={'mt-4 rounded-xl border-2 bg-pitch-900 p-4 shadow-[0_0_28px_rgba(239,191,78,0.12)] ' + (qteSeconds <= 3 ? 'animate-urgent border-red-500/70' : 'border-flood-400/60')}>
                 <p className="text-sm font-semibold text-amber-400">
                   {pendingMoment.minute}' — {pendingMoment.prompt}
                 </p>
                 <div className="mt-2 h-1 rounded bg-slate-800">
                   <div
-                    className="h-1 rounded bg-amber-500 transition-all"
+                    className={'h-1 rounded transition-all ' + (qteSeconds <= 3 ? 'bg-red-500' : 'bg-amber-500')}
                     style={{ width: (qteSeconds / QTE_SECONDS) * 100 + '%' }}
                   />
                 </div>
@@ -449,7 +449,7 @@ export default function MatchScreen({ fixture, onDone }) {
                     <button
                       key={o.id}
                       onClick={() => chooseOption(pendingMoment, i)}
-                      className="w-full rounded-lg border border-slate-700 px-3 py-2.5 text-left transition hover:border-amber-500"
+                      className="w-full rounded-lg border border-slate-700 px-3 py-2.5 text-left transition hover:border-amber-500 hover:bg-amber-500/5 active:scale-[0.99]"
                     >
                       <span className="text-sm font-semibold">{o.label}</span>
                       <span className="ml-2 text-xs text-slate-400">{o.hint}</span>
@@ -462,7 +462,7 @@ export default function MatchScreen({ fixture, onDone }) {
 
             <ul className="mt-6 space-y-2">
               {eventsVisible.slice().reverse().map((e, i) => (
-                <li key={i} className={'rounded-lg border px-3 py-2 text-sm ' + eventClass(e)}>
+                <li key={i} className={'animate-slide-in rounded-lg border px-3 py-2 text-sm ' + eventClass(e)}>
                   <span className="mr-2 text-xs text-slate-500">{e.minute}'</span>
                   {e.qte && <span className="mr-1 rounded bg-amber-500/20 px-1 text-[10px] text-amber-300">QTE</span>}
                   {e.sub && <span className="mr-1 rounded bg-teal-500/20 px-1 text-[10px] text-teal-300">CAMBIO</span>}
@@ -475,7 +475,7 @@ export default function MatchScreen({ fixture, onDone }) {
 
         {phase === 'end' && (
           <div className="mt-8 space-y-6 text-center">
-            <p className="text-4xl font-bold tabular-nums">{finalResult.homeGoals}-{finalResult.awayGoals}</p>
+            <p className="scoreboard animate-goal-flash inline-block rounded-lg px-4 text-5xl font-bold tabular-nums tracking-widest text-flood-300">{finalResult.homeGoals}-{finalResult.awayGoals}</p>
             <p className="text-sm text-slate-400">{home.name} — {away.name}</p>
             <ul className="mx-auto max-w-sm space-y-2 text-left">
               {allEvents.map((e, i) => (
@@ -489,7 +489,7 @@ export default function MatchScreen({ fixture, onDone }) {
             </ul>
             <button
               onClick={() => onDone(finalResult)}
-              className="rounded-lg bg-teal-500 px-6 py-2.5 text-sm font-semibold text-pitch-950 hover:bg-teal-400"
+              className="rounded-lg bg-teal-500 px-6 py-2.5 text-sm font-semibold text-pitch-950 shadow-[0_0_20px_rgba(47,181,110,0.25)] transition hover:bg-teal-400 hover:shadow-[0_0_28px_rgba(47,181,110,0.35)] active:scale-[0.98]"
             >
               Continua
             </button>
