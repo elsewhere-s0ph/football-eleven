@@ -188,30 +188,39 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
   async function handleMatchEnd(result) {
     const fixture = matchFixture
     if (!fixture) return
-    const others = fixtures.filter((f) => f.number === fixture.number && f.key !== fixture.key && !f.played)
-    const simResults = others.map((f) => {
-      const sim = simulateMatch(
-        clubById[f.homeId],
-        clubById[f.awayId],
-        fitPlayersFor(f.number),
-        matchSeed(career.seed, f.key + '#' + career.season),
-      )
-      return { f, sim }
-    })
-    await saveFixtureResults([
-      { key: fixture.key, homeGoals: result.homeGoals, awayGoals: result.awayGoals },
-      ...simResults.map((r) => ({ key: r.f.key, homeGoals: r.sim.homeGoals, awayGoals: r.sim.awayGoals })),
-    ])
-    await applyPostMatch(career.id, fixture, result, userClub.id, squad, players)
-    for (const r of simResults) await applyAiMatchday(r.f, r.sim.events, players)
-    setMatchFixture(null)
-    await load(career.id)
+    try {
+      const others = fixtures.filter((f) => f.number === fixture.number && f.key !== fixture.key && !f.played)
+      const simResults = others.map((f) => {
+        const sim = simulateMatch(
+          clubById[f.homeId],
+          clubById[f.awayId],
+          fitPlayersFor(f.number),
+          matchSeed(career.seed, f.key + '#' + career.season),
+        )
+        return { f, sim }
+      })
+      await saveFixtureResults([
+        { key: fixture.key, homeGoals: result.homeGoals, awayGoals: result.awayGoals },
+        ...simResults.map((r) => ({ key: r.f.key, homeGoals: r.sim.homeGoals, awayGoals: r.sim.awayGoals })),
+      ])
+      await applyPostMatch(career.id, fixture, result, userClub.id, squad, players)
+      for (const r of simResults) await applyAiMatchday(r.f, r.sim.events, players)
+      setMatchFixture(null)
+      await load(career.id)
+    } catch (err) {
+      setMatchFixture(null)
+      window.alert('Errore nel salvare la partita: ' + err.message)
+    }
   }
 
   async function handleEndSeason() {
-    const summary = await endSeason(career.id)
-    await load(career.id)
-    setSeasonSummary(summary)
+    try {
+      const summary = await endSeason(career.id)
+      await load(career.id)
+      setSeasonSummary(summary)
+    } catch (err) {
+      window.alert('Errore nel chiudere la stagione: ' + err.message)
+    }
   }
 
   async function handleExport() {
@@ -302,7 +311,7 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
                   <li>Morale rosa: <b>{avgMorale}</b></li>
                   <li>Infortunati: <b className={injuredCount ? 'text-red-400' : ''}>{injuredCount}</b></li>
                   <li>Budget: <b>{fmtMoney(userClub.budget)}</b></li>
-                  <li>Stipendi: <b>{fmtMoney(wageBill)}</b>/anno</li>
+                  <li>Stipendi: <b>{fmtMoney(wageBill)}</b></li>
                 </ul>
               </Card>
             </div>
@@ -346,7 +355,7 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
             <Card title="Finanze e strutture">
               <ul className="mb-3 space-y-1 text-sm text-slate-300">
                 <li>Budget trasferimenti: <b>{fmtMoney(userClub.budget)}</b></li>
-                <li>Stipendi rosa: <b>{fmtMoney(wageBill)}</b>/anno</li>
+                <li>Stipendi rosa: <b>{fmtMoney(wageBill)}</b></li>
                 <li>Stadio: <b>{userClub.stadium.name}</b> ({userClub.stadium.capacity.toLocaleString('it-IT')} posti)</li>
               </ul>
               <div className="space-y-1.5">
@@ -479,7 +488,7 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
                   </li>
                 ))}
                 {!seasonSummary.declined.length && (
-                  <li className="text-slate-500">Nessuno: la류 sta ancora aspettando i trent'anni.</li>
+                  <li className="text-slate-500">Nessuno: la squadra sta ancora aspettando i trent'anni.</li>
                 )}
               </ul>
             </div>
