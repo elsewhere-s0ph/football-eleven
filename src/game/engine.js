@@ -10,6 +10,10 @@
  * opzione è precomputato deterministicamente da (seed partita, momento,
  * scelta): lo stesso QTE dà sempre lo stesso esito, quindi non si può
  * "ritirare il dado" ricaricando la pagina.
+ *
+ * Sostituzioni: la UI live chiama subImpact() quando entra un fresco.
+ * L'impatto (gol, assist, occasione o nulla) è deterministico da
+ * (seed partita, giocatore, minuto del cambio): niente reroll.
  */
 import { Rng } from '../lib/rng'
 
@@ -34,9 +38,14 @@ export function matchSeed(careerSeed, fixtureKey) {
   return new Rng(matchSeedNumber(careerSeed, fixtureKey))
 }
 
+/** Miglior XI (senior) per OVR. */
+export function bestXI(squad) {
+  return squad.filter((p) => !p.youth).sort((a, b) => b.ovr - a.ovr).slice(0, 11)
+}
+
 /** Forza squadra: media OVR della miglior XI (senior) corretta dal morale. */
 export function teamStrength(club, squad) {
-  const seniors = squad.filter((p) => !p.youth).sort((a, b) => b.ovr - a.ovr).slice(0, 11)
+  const seniors = bestXI(squad)
   if (!seniors.length) return 40
   const base = seniors.reduce((s, p) => s + p.ovr, 0) / seniors.length
   const morale = seniors.reduce((s, p) => s + p.morale, 0) / seniors.length
@@ -202,6 +211,44 @@ export function simulateMatch(homeClub, awayClub, playersByClubId, rng) {
     awayGoals: baseEvents.filter((e) => e.type === 'goal' && e.side === 'away').length,
     events: baseEvents,
   }
+}
+
+/**
+ * Impatto di una sostituzione, deterministico da (seed partita, giocatore
+ * che entra, minuto del cambio): 13% gol del fresco, 13% assist (gol di un
+ * compagno), 12% occasione pericolosa. Altrimenti nulla: il cambio è solo
+ * fatica fresca, e va già bene così.
+ */
+export function subImpact(seedNumber, inPlayer, subMinute, squad) {
+  const rng = outcomeRng(seedNumber, 'sub:' + inPlayer.id + ':' + subMinute)
+  const at = Math.min(subMinute + rng.int(2, 15), 92)
+  const roll = rng.float()
+  if (roll < 0.13) {
+    return {
+      minute: at,
+      type: 'goal',
+      playerId: inPlayer.id,
+      text: 'GOL! Appena entrato e già decisivo: ' + inPlayer.name + ' insacchina il pallone della sveglia',
+    }
+  }
+  if (roll < 0.26) {
+    const scorer = pickScorer(rng, squad.filter((p) => p.id !== inPlayer.id))
+    return {
+      minute: at,
+      type: 'goal',
+      playerId: scorer.id,
+      text: 'GOL! ' + scorer.name + ' trafora la difesa su lancio del freschissimo ' + inPlayer.name,
+    }
+  }
+  if (roll < 0.38) {
+    return {
+      minute: at,
+      type: 'chance',
+      playerId: inPlayer.id,
+      text: 'Conclusione velenosa di ' + inPlayer.name + ' appena entrato: alto di poco',
+    }
+  }
+  return null
 }
 
 /* ---------------- Momenti chiave (QTE) ---------------- */

@@ -5,6 +5,7 @@ import { scoutedPotential } from '../game/scouting'
 import { computeStandings } from '../game/standings'
 import { simulateMatch, matchSeed } from '../game/engine'
 import MatchScreen from './MatchScreen'
+import pkg from '../../package.json'
 
 const ROLE_LABELS = { GK: 'Portieri', DF: 'Difensori', MF: 'Centrocampisti', FW: 'Attaccanti' }
 const ROLE_ORDER = ['GK', 'DF', 'MF', 'FW']
@@ -371,7 +372,7 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
               </button>
             </div>
             <p className="text-xs text-slate-500">
-              Pitchtory v0.4.0 · seed: {career.seedText || career.seed} · tutto sul tuo dispositivo, sempre.
+              Pitchtory v{pkg.version} · seed: {career.seedText || career.seed} · tutto sul tuo dispositivo, sempre.
             </p>
           </div>
         )}

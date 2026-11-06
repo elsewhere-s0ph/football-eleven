@@ -1,18 +1,29 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useCareer } from '../store'
-import { buildMatch, matchSeedNumber } from '../game/engine'
+import { buildMatch, matchSeedNumber, bestXI, subImpact } from '../game/engine'
 import { Rng } from '../lib/rng'
 
 /** Millisecondi per minuto simulato, per durata partita configurata. */
 const MS_PER_MINUTE = { short: 800, normal: 3500, long: 4700 }
 const FULL_TIME = 93
 const QTE_SECONDS = 10
+const MAX_SUBS = 3
+/** Consumo stamina per minuto simulato, per ruolo. */
+const STAMINA_DECAY = { GK: 0.35, DF: 0.75, MF: 0.9, FW: 0.85 }
+/** Energia con cui entra un giocatore fresco. */
+const FRESH_STAMINA = 97
 
 function eventClass(e) {
   if (e.type === 'goal') return 'border-teal-500/40 bg-teal-500/10 font-semibold text-teal-200'
   if (e.type === 'red') return 'border-red-500/40 bg-red-500/10 text-red-300'
   if (e.type === 'card') return 'border-amber-500/30 bg-amber-500/5 text-amber-200/80'
   return 'border-slate-800 bg-pitch-900/40 text-slate-300'
+}
+
+function staminaColor(v) {
+  if (v >= 40) return 'bg-teal-500'
+  if (v >= 20) return 'bg-amber-500'
+  return 'bg-red-500'
 }
 
 function TeamBadge({ club }) {
@@ -33,6 +44,11 @@ export default function MatchScreen({ fixture, onDone }) {
   const [minute, setMinute] = useState(0)
   const [resolved, setResolved] = useState({})
   const [qteSeconds, setQteSeconds] = useState(QTE_SECONDS)
+  const [subs, setSubs] = useState([])
+  const [subEvents, setSubEvents] = useState([])
+  const [subsOpen, setSubsOpen] = useState(false)
+  const [pickOut, setPickOut] = useState(null)
+  const [pickIn, setPickIn] = useState(null)
 
   const clubById = useMemo(() => Object.fromEntries(clubs.map((c) => [c.id, c])), [clubs])
   const playersByClub = useMemo(() => {
@@ -49,8 +65,44 @@ export default function MatchScreen({ fixture, onDone }) {
       seedNumber,
       userClubId: career.clubId,
     })
-    return { ...built, userIsHome: fixture.homeId === career.clubId }
+    return { ...built, userIsHome: fixture.homeId === career.clubId, seedNumber }
   }, [career, clubById, playersByClub, fixture])
+
+  /** Rosa senior della squadra utente: XI titolare e panchina. */
+  const userSquad = useMemo(
+    () => (playersByClub[career.clubId] || []).filter((p) => !p.youth),
+    [playersByClub, career],
+  )
+  const xi = useMemo(() => bestXI(userSquad), [userSquad])
+  const bench = useMemo(() => userSquad.filter((p) => !xi.some((t) => t.id === p.id)), [userSquad, xi])
+
+  const [stamina, setStamina] = useState(() => Object.fromEntries(xi.map((p) => [p.id, 100])))
+
+  /** Chi è in campo al minuto corrente (cambi applicati). */
+  const onPitch = useMemo(() => {
+    const outIds = new Set(subs.filter((s) => s.minute <= minute).map((s) => s.outId))
+    const inIds = new Set(subs.filter((s) => s.minute <= minute).map((s) => s.inId))
+    const list = xi.filter((p) => !outIds.has(p.id))
+    for (const id of inIds) {
+      const p = userSquad.find((x) => x.id === id)
+      if (p) list.push(p)
+    }
+    return list
+  }, [xi, subs, minute, userSquad])
+
+  // Consumo stamina a ogni minuto simulato.
+  useEffect(() => {
+    if (minute <= 0 || minute > FULL_TIME) return
+    setStamina((s) => {
+      const next = { ...s }
+      for (const p of onPitch) {
+        if (next[p.id] === undefined) continue
+        next[p.id] = Math.max(0, next[p.id] - (STAMINA_DECAY[p.role] || 0.9))
+      }
+      return next
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [minute])
 
   /** Eventi generati dalle scelte QTE risolte. */
   const momentEvents = useMemo(() => {
@@ -69,11 +121,26 @@ export default function MatchScreen({ fixture, onDone }) {
   }, [match, resolved])
 
   const allEvents = useMemo(
-    () => [...match.baseEvents, ...momentEvents].sort((a, b) => a.minute - b.minute),
-    [match, momentEvents],
+    () => [...match.baseEvents, ...momentEvents, ...subEvents].sort((a, b) => a.minute - b.minute),
+    [match, momentEvents, subEvents],
   )
 
   const pendingMoment = match.keyMoments.find((m) => m.minute <= minute && resolved[m.id] === undefined)
+
+  /** Giocatori coinvolti in un momento chiave non ancora risolto: non si cambiano. */
+  const locked = useMemo(() => {
+    const set = new Set()
+    for (const m of match.keyMoments) {
+      if (resolved[m.id] !== undefined) continue
+      for (const o of m.options) {
+        if (o.outcome && o.outcome.playerId) set.add(o.outcome.playerId)
+      }
+      for (const p of userSquad) {
+        if (m.prompt.includes(p.name)) set.add(p.id)
+      }
+    }
+    return set
+  }, [match, resolved, userSquad])
 
   // Avanzamento minuto per minuto, con pausa QTE sui momenti chiave.
   useEffect(() => {
@@ -81,6 +148,7 @@ export default function MatchScreen({ fixture, onDone }) {
     if (pendingMoment) {
       setPhase('qte')
       setQteSeconds(QTE_SECONDS)
+      setSubsOpen(false)
       return
     }
     if (minute >= FULL_TIME) {
@@ -126,11 +194,30 @@ export default function MatchScreen({ fixture, onDone }) {
     setPhase('end')
   }
 
+  /** Effettua un cambio: annuncio in cronaca + eventuale impatto deterministico del fresco. */
+  function makeSub() {
+    if (!pickOut || !pickIn || subs.length >= MAX_SUBS) return
+    const m = Math.min(Math.max(1, minute), 92)
+    setSubs((s) => [...s, { minute: m, outId: pickOut.id, inId: pickIn.id }])
+    setStamina((s) => ({ ...s, [pickIn.id]: FRESH_STAMINA }))
+    const evs = [
+      { minute: m, type: 'sub', sub: true, text: 'Cambio: esce ' + pickOut.name + ', entra ' + pickIn.name },
+    ]
+    const impact = subImpact(match.seedNumber, pickIn, m, userSquad)
+    if (impact) evs.push({ ...impact, sub: true })
+    setSubEvents((s) => [...s, ...evs])
+    setPickOut(null)
+    setPickIn(null)
+    setSubsOpen(false)
+  }
+
   const eventsVisible = phase === 'pre' ? [] : allEvents.filter((e) => e.minute <= minute)
   const hg = eventsVisible.filter((e) => e.type === 'goal' && e.side === 'home').length
   const ag = eventsVisible.filter((e) => e.type === 'goal' && e.side === 'away').length
   const home = clubById[fixture.homeId]
   const away = clubById[fixture.awayId]
+  const subsLeft = MAX_SUBS - subs.length
+  const benchLeft = bench.filter((p) => !subs.some((s) => s.inId === p.id))
 
   const finalResult = {
     homeGoals: allEvents.filter((e) => e.type === 'goal' && e.side === 'home').length,
@@ -153,7 +240,7 @@ export default function MatchScreen({ fixture, onDone }) {
               <TeamBadge club={away} />
             </div>
             <p className="text-xs text-slate-500">
-              Durante la partita potrebbero arrivare momenti chiave: 3 opzioni, {QTE_SECONDS} secondi per decidere.
+              Momenti chiave con 3 opzioni e {QTE_SECONDS} secondi per decidere, fino a {MAX_SUBS} cambi in corsa.
             </p>
             <div className="mx-auto flex max-w-xs flex-col gap-2">
               <button
@@ -186,6 +273,100 @@ export default function MatchScreen({ fixture, onDone }) {
                 style={{ width: (minute / FULL_TIME) * 100 + '%' }}
               />
             </div>
+
+            {phase === 'live' && subsLeft > 0 && (
+              <button
+                onClick={() => {
+                  setSubsOpen((o) => !o)
+                  setPickOut(null)
+                  setPickIn(null)
+                }}
+                className="mt-3 w-full rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300 hover:border-teal-500"
+              >
+                {subsOpen ? 'Chiudi pannello cambi' : 'Cambio · ' + subsLeft + ' disponibili'}
+              </button>
+            )}
+
+            {phase === 'live' && subsOpen && (
+              <div className="mt-3 rounded-xl border border-slate-700 bg-pitch-900 p-4">
+                {!pickOut ? (
+                  <>
+                    <p className="text-sm font-semibold">Chi esce?</p>
+                    <ul className="mt-2 space-y-1.5">
+                      {onPitch.map((p) => {
+                        const st = stamina[p.id] === undefined ? 100 : stamina[p.id]
+                        const isLocked = locked.has(p.id)
+                        return (
+                          <li key={p.id}>
+                            <button
+                              disabled={isLocked}
+                              onClick={() => setPickOut(p)}
+                              title={isLocked ? 'Coinvolto in un momento chiave in arrivo' : 'Stamina ' + Math.round(st) + '%'}
+                              className={
+                                'w-full rounded-lg border px-3 py-2 text-left text-sm ' +
+                                (isLocked
+                                  ? 'cursor-not-allowed border-slate-800 opacity-50'
+                                  : 'border-slate-700 hover:border-teal-500')
+                              }
+                            >
+                              <span className="flex items-baseline justify-between gap-2">
+                                <span className="min-w-0 flex-1 truncate font-semibold">{p.name}</span>
+                                <span className="text-xs text-slate-400">{p.role}</span>
+                                <span className="text-xs tabular-nums text-slate-400">{Math.round(st)}%</span>
+                              </span>
+                              <span className="mt-1.5 block h-1 rounded bg-slate-800">
+                                <span className={'block h-1 rounded ' + staminaColor(st)} style={{ width: st + '%' }} />
+                              </span>
+                            </button>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm font-semibold">Chi entra al posto di {pickOut.name}?</p>
+                    <ul className="mt-2 space-y-1.5">
+                      {benchLeft.map((p) => (
+                        <li key={p.id}>
+                          <button
+                            onClick={() => setPickIn(p)}
+                            className={
+                              'w-full rounded-lg border px-3 py-2 text-left text-sm ' +
+                              (pickIn && pickIn.id === p.id
+                                ? 'border-teal-500 bg-teal-500/10'
+                                : 'border-slate-700 hover:border-teal-500')
+                            }
+                          >
+                            <span className="min-w-0 flex-1 truncate font-semibold">{p.name}</span>
+                            <span className="ml-2 text-xs text-slate-400">{p.role} · OVR {p.ovr}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="mt-3 flex gap-2">
+                      <button
+                        onClick={() => {
+                          setPickOut(null)
+                          setPickIn(null)
+                        }}
+                        className="rounded-lg border border-slate-700 px-3 py-2 text-xs text-slate-300 hover:border-slate-500"
+                      >
+                        Indietro
+                      </button>
+                      <button
+                        disabled={!pickIn}
+                        onClick={makeSub}
+                        className="rounded-lg bg-teal-500 px-3 py-2 text-xs font-semibold text-pitch-950 hover:bg-teal-400 disabled:opacity-40"
+                      >
+                        Conferma cambio
+                      </button>
+                    </div>
+                  </>
+                )}
+                <p className="mt-2 text-xs text-slate-500">L'orologio continua a correre: il calcio è anche questo.</p>
+              </div>
+            )}
 
             {phase === 'qte' && pendingMoment && (
               <div className="mt-4 rounded-xl border-2 border-amber-500/60 bg-pitch-900 p-4">
@@ -220,6 +401,7 @@ export default function MatchScreen({ fixture, onDone }) {
                 <li key={i} className={'rounded-lg border px-3 py-2 text-sm ' + eventClass(e)}>
                   <span className="mr-2 text-xs text-slate-500">{e.minute}'</span>
                   {e.qte && <span className="mr-1 rounded bg-amber-500/20 px-1 text-[10px] text-amber-300">QTE</span>}
+                  {e.sub && <span className="mr-1 rounded bg-teal-500/20 px-1 text-[10px] text-teal-300">CAMBIO</span>}
                   {e.text}
                 </li>
               ))}
@@ -236,6 +418,7 @@ export default function MatchScreen({ fixture, onDone }) {
                 <li key={i} className="text-sm">
                   <span className="mr-2 text-xs text-slate-500">{e.minute}'</span>
                   {e.qte && <span className="mr-1 rounded bg-amber-500/20 px-1 text-[10px] text-amber-300">QTE</span>}
+                  {e.sub && <span className="mr-1 rounded bg-teal-500/20 px-1 text-[10px] text-teal-300">CAMBIO</span>}
                   {e.text}
                 </li>
               ))}
