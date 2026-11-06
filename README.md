@@ -2,7 +2,7 @@
 
 **Pitch + Victory.** Il football manager definitivo in formato PWA. Tutto client-side: nessun account, nessun server — la carriera vive sul tuo dispositivo.
 
-> Stato: Fase 4 completa — motore partite, QTE, sostituzioni, infortuni, attributi 1-20, schede giocatore, fine stagione e mercato. Prossima: F5 abilità speciali e osservatori.
+> Stato: Fase 5 completa — motore partite, QTE, sostituzioni, infortuni, attributi 1-20, schede giocatore, fine stagione, mercato, abilità speciali e osservatorio. Prossima: F6 standard PWA completo.
 
 ## Sviluppo
 
@@ -41,6 +41,14 @@ Il calcio si compra e si vende, a finestre: **estiva** (prima della giornata 1) 
 
 **La lega vive**: a fine stagione anche i club AI si rinforzano tra loro con un loro mercato estivo. Guardie serie: rosa minima 16 senior per vendere, massima 30 per comprare. La Primavera non si tocca: cresce in silenzio.
 
+## Abilità speciali e osservatori (F5)
+
+**Dieci abilità con la rarità nel seed**: ogni calciatore può averne una — il 9% una comune, il 3% una rara, lo 0,8% una leggendaria, con massimo **3 Fuoriclasse per lega**. Bomber d'area, Falcata, Muro di Gomma e Maratoneta (comuni); Ghiaccio nelle vene, Regista, Capitano, Specialista di punizioni e Falco aereo (rare); Fuoriclasse (leggendaria). Assegnazione deterministica dal seed: stessa lega, stessi campioni. Le carriere esistenti migrano al primo caricamento, senza toccare la rosa.
+
+**Effetti concreti in campo**: il Bomber d'area segna di più, il Regista serve gli assist, il Capitano e il Fuoriclasse alzano la forza della squadra. Ghiaccio nelle vene non sbaglia un rigore, lo Specialista prende la punizione dal limite, il Falco aereo sale sul corner finale, il Muro di Gomma respinge i tiri, la Falcata allunga il contropiede, il Maratoneta consuma meno stamina. Nei prompt dei QTE si leggono i nomi: chi ha l'abilità giusta, nel momento giusto, si vede.
+
+**Osservatorio**: la stima del potenziale della Primavera passa dallo staff alla **rete di osservatori** — livelli 1-5 con margine di errore da ±10 a ±2 OVR, **focus per ruolo** (portieri, difensori, centrocampisti, attaccanti) che restringe il dubbio, potenziamenti a budget (da 2M a 15M). Ogni potenziamento rilegge la Primavera: le stime cambiano, la verità no. Chi ha un'abilità porta il **✦** in rosa e nel mercato, e il valore di mercato premia i campioni.
+
 ## Stack
 
 React · Vite · Tailwind CSS · Dexie (IndexedDB) · Zustand · PRNG con seed (carriere deterministiche e condivisibili)
@@ -54,7 +62,7 @@ React · Vite · Tailwind CSS · Dexie (IndexedDB) · Zustand · PRNG con seed (
 - Attributi 1-20 come fonte di verità, OVR derivato per ruolo: la crescita e il declino si vedono punto per punto
 - Chi gioca migliora di più: la progressione dipende dai minuti, dall'età e dal potenziale nascosto
 - Gestione completa: mercato, contratti, morale, rapporti
-- Potenziale dei giovani mai rivelato: stima dello staff, sistema osservatori completo in F5
+- Potenziale dei giovani mai rivelato: stima degli osservatori, margine che si restringe potenziando la rete
 - Abilità Speciali con rarità (comune → leggendaria)
 - Nomi fittizi credibili, niente cliché
 
@@ -66,7 +74,7 @@ React · Vite · Tailwind CSS · Dexie (IndexedDB) · Zustand · PRNG con seed (
 - [x] F3 — Motore partite live, QTE, sostituzioni, infortuni, progressione, fine stagione
 - [x] F3.5 — Attributi 1-20, OVR derivato, schede giocatore
 - [x] F4 — Mercato: finestre estiva e invernale, trattative con controfferta, offerte AI, la lega che commercia
-- [ ] F5 — Abilità Speciali e osservatori
+- [x] F5 — Abilità Speciali e osservatori
 - [ ] F6 — PWA completa (manifest, service worker, _headers, bilingue)
 - [ ] F7 — Capacitor (app vera)
 
