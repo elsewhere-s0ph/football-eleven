@@ -27,7 +27,7 @@ export function askingPrice(player, sellerSquad, season) {
  * contano il prezzo pieno. Una trattativa, non un'asta.
  */
 export function respondToOffer(offer, asking, sellerSeniors) {
-  if (offer <= 0) return { status: 'rejected', message: 'Un'offerta seria, grazie.' }
+  if (offer <= 0) return { status: 'rejected', message: "Un'offerta seria, grazie." }
   if (sellerSeniors <= 16) return { status: 'rejected', message: 'La rosa è al limite: non possono vendere.' }
   if (offer >= asking) return { status: 'accepted', fee: offer }
   if (offer >= asking * 0.8) return { status: 'counter', counter: asking }
