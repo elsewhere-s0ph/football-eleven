@@ -30,7 +30,7 @@ function parseMillions(str) {
 }
 
 function ovrClass(ovr) {
-  if (ovr >= 80) return 'bg-teal-400/15 text-teal-300'
+  if (ovr >= 80) return 'bg-flood-400/15 text-flood-300'
   if (ovr >= 70) return 'bg-pitch-700 text-pitch-100'
   return 'bg-pitch-800 text-pitch-300'
 }
@@ -202,7 +202,7 @@ export default function TransferMarket({ career, userClub, clubs, players, next,
     return (
       <div className="mx-auto max-w-md space-y-3">
         <div className="rounded-2xl border border-pitch-700 bg-pitch-900 p-6 text-center">
-          <p className="text-lg font-bold text-pitch-100">Mercato chiuso</p>
+          <p className="scoreboard text-lg font-semibold tracking-wider text-pitch-100">Mercato chiuso</p>
           <p className="mt-2 text-sm leading-relaxed text-pitch-400">
             Si riapre in estate, prima della giornata 1, e d'inverno, tra la 19ª e la 20ª.
             Il calcio ai liquori si beve solo a finestre aperte.
@@ -265,7 +265,7 @@ export default function TransferMarket({ career, userClub, clubs, players, next,
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Cerca un nome..."
-            className="w-full rounded-xl border border-pitch-700 bg-pitch-900 px-3 py-2 text-sm text-pitch-100 placeholder:text-pitch-500"
+            className="w-full rounded-xl border border-pitch-700 bg-pitch-900 px-3 py-2 text-sm text-pitch-100 transition placeholder:text-pitch-500 focus:border-flood-400 focus:outline-none focus:shadow-[0_0_16px_rgba(239,191,78,0.15)]"
           />
           {isBuyDisabled ? (
             <p className="rounded-xl border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-200">
@@ -307,10 +307,10 @@ export default function TransferMarket({ career, userClub, clubs, players, next,
 
       {sheet ? (
         <div className="fixed inset-0 z-30 flex items-end justify-center bg-pitch-950/80 p-3 sm:items-center" onClick={closeSheet}>
-          <div className="w-full max-w-md space-y-3 rounded-2xl border border-pitch-700 bg-pitch-900 p-4" onClick={(e) => e.stopPropagation()}>
+          <div className="animate-fade-up w-full max-w-md space-y-3 rounded-2xl border border-pitch-700 bg-pitch-900 p-4 shadow-[0_0_40px_rgba(239,191,78,0.06),0_10px_40px_rgba(0,0,0,0.5)]" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <p className="truncate text-base font-bold text-pitch-100">{sheet.name}</p>
+                <p className="scoreboard truncate text-lg font-semibold">{sheet.name}</p>
                 <p className="text-xs text-pitch-400">{sheetClub ? sheetClub.name : userClub.name}</p>
               </div>
               <button onClick={closeSheet} className="text-pitch-400 hover:text-pitch-200">✕</button>
@@ -327,15 +327,15 @@ export default function TransferMarket({ career, userClub, clubs, players, next,
               </div>
               <div className="rounded-xl bg-pitch-800 py-2">
                 <p className="text-[10px] uppercase tracking-wide text-pitch-400">OVR</p>
-                <p className="text-sm font-bold text-teal-300">{sheet.ovr}</p>
+                <p className="text-sm font-bold text-flood-300">{sheet.ovr}</p>
               </div>
             </div>
 
             {mode === 'buy' ? (
               <div className="space-y-3">
                 {Array.isArray(sheet.abilities) && sheet.abilities.length > 0 ? (
-                  <p className="text-xs text-amber-300">
-                    Abilità: {sheet.abilities.map((id) => (ABILITIES[id] ? ABILITIES[id].name : id)).join(' · ')}
+                  <p className="text-xs text-flood-300">
+                    ✦ Abilità: {sheet.abilities.map((id) => (ABILITIES[id] ? ABILITIES[id].name : id)).join(' · ')}
                   </p>
                 ) : null}
                 <p className="text-sm text-pitch-300">
@@ -354,7 +354,7 @@ export default function TransferMarket({ career, userClub, clubs, players, next,
                       inputMode="decimal"
                       value={offerInput}
                       onChange={(e) => { setOfferInput(e.target.value); setResponse(null) }}
-                      className="w-full rounded-xl border border-pitch-700 bg-pitch-950 px-3 py-2 text-sm text-pitch-100"
+                      className="w-full rounded-xl border border-pitch-700 bg-pitch-950 px-3 py-2 text-sm text-pitch-100 transition focus:border-flood-400 focus:outline-none focus:shadow-[0_0_16px_rgba(239,191,78,0.15)]"
                     />
                     {overBudget ? (
                       <p className="text-xs text-red-300">Sfori il budget: hai {fmtMillions(userClub.budget)}.</p>
@@ -364,7 +364,7 @@ export default function TransferMarket({ career, userClub, clubs, players, next,
                       <button
                         onClick={propose}
                         disabled={busy || offerValue <= 0 || overBudget}
-                        className="w-full rounded-xl bg-teal-400 px-3 py-2.5 text-sm font-bold text-pitch-950 disabled:opacity-40"
+                        className="w-full rounded-xl bg-teal-400 px-3 py-2.5 text-sm font-bold text-pitch-950 shadow-[0_0_20px_rgba(47,181,110,0.25)] transition hover:shadow-[0_0_28px_rgba(47,181,110,0.35)] active:scale-[0.98] disabled:opacity-40"
                       >Proponi l'offerta</button>
                     ) : null}
 
@@ -376,7 +376,7 @@ export default function TransferMarket({ career, userClub, clubs, players, next,
                         <button
                           onClick={() => completeBuy(response.fee)}
                           disabled={busy}
-                          className="w-full rounded-xl bg-teal-400 px-3 py-2.5 text-sm font-bold text-pitch-950 disabled:opacity-40"
+                          className="w-full rounded-xl bg-teal-400 px-3 py-2.5 text-sm font-bold text-pitch-950 shadow-[0_0_20px_rgba(47,181,110,0.25)] transition hover:shadow-[0_0_28px_rgba(47,181,110,0.35)] active:scale-[0.98] disabled:opacity-40"
                         >Completa l'acquisto · {fmtMillions(response.fee)}</button>
                       </div>
                     ) : null}
@@ -390,7 +390,7 @@ export default function TransferMarket({ career, userClub, clubs, players, next,
                           <button
                             onClick={() => completeBuy(response.counter)}
                             disabled={busy || response.counter > userClub.budget}
-                            className="flex-1 rounded-xl bg-teal-400 px-3 py-2.5 text-sm font-bold text-pitch-950 disabled:opacity-40"
+                            className="flex-1 rounded-xl bg-teal-400 px-3 py-2.5 text-sm font-bold text-pitch-950 shadow-[0_0_20px_rgba(47,181,110,0.25)] transition hover:shadow-[0_0_28px_rgba(47,181,110,0.35)] active:scale-[0.98] disabled:opacity-40"
                           >{'Paga ' + fmtMillions(response.counter)}</button>
                           <button onClick={closeSheet} className="flex-1 rounded-xl border border-pitch-700 px-3 py-2.5 text-sm font-semibold text-pitch-300">Ritirati</button>
                         </div>
@@ -418,7 +418,7 @@ export default function TransferMarket({ career, userClub, clubs, players, next,
                   <button
                     onClick={askBid}
                     disabled={busy}
-                    className="w-full rounded-xl bg-teal-400 px-3 py-2.5 text-sm font-bold text-pitch-950 disabled:opacity-40"
+                    className="w-full rounded-xl bg-teal-400 px-3 py-2.5 text-sm font-bold text-pitch-950 shadow-[0_0_20px_rgba(47,181,110,0.25)] transition hover:shadow-[0_0_28px_rgba(47,181,110,0.35)] active:scale-[0.98] disabled:opacity-40"
                   >Chiedi offerte al mercato</button>
                 ) : bid === 'none' ? (
                   <div className="space-y-2">
@@ -436,7 +436,7 @@ export default function TransferMarket({ career, userClub, clubs, players, next,
                       <button
                         onClick={acceptBid}
                         disabled={busy}
-                        className="flex-1 rounded-xl bg-teal-400 px-3 py-2.5 text-sm font-bold text-pitch-950 disabled:opacity-40"
+                        className="flex-1 rounded-xl bg-teal-400 px-3 py-2.5 text-sm font-bold text-pitch-950 shadow-[0_0_20px_rgba(47,181,110,0.25)] transition hover:shadow-[0_0_28px_rgba(47,181,110,0.35)] active:scale-[0.98] disabled:opacity-40"
                       >Accetta l'offerta</button>
                       <button onClick={() => setBid(null)} className="flex-1 rounded-xl border border-pitch-700 px-3 py-2.5 text-sm font-semibold text-pitch-300">Declina</button>
                     </div>
