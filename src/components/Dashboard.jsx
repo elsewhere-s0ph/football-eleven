@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useCareer } from '../store'
-import { deleteCareer, exportCareer, importCareer, listCareers, saveFixtureResults, applyPostMatch, applyAiMatchday, endSeason, updateCareerSettings } from '../db'
-import { scoutedPotential } from '../game/scouting'
+import { deleteCareer, exportCareer, importCareer, listCareers, saveFixtureResults, applyPostMatch, applyAiMatchday, endSeason, updateCareerSettings, upgradeScouts, setScoutFocus, SCOUT_UPGRADE_COST } from '../db'
+import { scoutedPotential, scoutError } from '../game/scouting'
 import { computeStandings } from '../game/standings'
 import { simulateMatch, matchSeed } from '../game/engine'
 import MatchScreen from './MatchScreen'
@@ -44,6 +44,9 @@ function PlayerRow({ p, season, round, onOpen }) {
         className="min-w-0 flex-1 truncate text-left hover:text-teal-300"
       >
         {p.name}
+        {Array.isArray(p.abilities) && p.abilities.length > 0 && (
+          <span className="ml-1 text-amber-400" title="Ha almeno un abilità speciale: apri la scheda">✦</span>
+        )}
       </button>
       <span className="flex w-14 shrink-0 items-center justify-end gap-1.5">
         <MoraleDot value={p.morale} />
@@ -180,10 +183,10 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
   const next = userFixtures.find((f) => !f.played)
   const round = next ? next.number : 39
   const injuredCount = squad.filter((p) => p.injuredUntil && round <= p.injuredUntil).length
-  const staffLevel = userClub.facilities.staffLevel
+  const scouts = career.scouts || { level: 1, focus: null }
   const youthRanked = youth
     .slice()
-    .sort((a, b) => scoutedPotential(b, staffLevel) - scoutedPotential(a, staffLevel))
+    .sort((a, b) => scoutedPotential(b, scouts) - scoutedPotential(a, scouts))
   const position = standings.findIndex((r) => r.clubId === userClub.id) + 1
 
   /** Solo i giocatori sani per la giornata indicata. */
@@ -230,6 +233,15 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
       setSeasonSummary(summary)
     } catch (err) {
       window.alert('Errore nel chiudere la stagione: ' + err.message)
+    }
+  }
+
+  async function handleScoutUpgrade() {
+    try {
+      await upgradeScouts(career.id)
+      await load(career.id)
+    } catch (err) {
+      window.alert(err.message)
     }
   }
 
@@ -385,6 +397,36 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
                 <LevelBar label="Staff" level={userClub.facilities.staffLevel} />
               </div>
             </Card>
+            <Card title="Osservatori">
+              <LevelBar label="Rete di osservatori" level={scouts.level} />
+              <p className="mt-2 text-xs text-slate-400">
+                Margine di errore sulle stime: ±{scoutError(scouts)} OVR.
+                {scouts.focus ? ' Focus su ' + ROLE_LABELS[scouts.focus].toLowerCase() + '.' : ' Nessun focus: si guarda tutto, male.'}
+              </p>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {[['GK', 'Portieri'], ['DF', 'Difensori'], ['MF', 'Centrocampisti'], ['FW', 'Attaccanti'], [null, 'Nessuno']].map(([f, l]) => (
+                  <button
+                    key={l}
+                    onClick={() => setScoutFocus(career.id, f).then(refresh)}
+                    className={'rounded-lg px-2.5 py-1 text-xs font-semibold ' + ((scouts.focus || null) === f ? 'bg-teal-400/15 text-teal-200' : 'bg-slate-800 text-slate-400')}
+                  >{l}</button>
+                ))}
+              </div>
+              {scouts.level >= 5 ? (
+                <p className="mt-3 text-xs text-slate-400">Rete al massimo: se non lo vedono loro, non esiste.</p>
+              ) : (
+                <button
+                  onClick={handleScoutUpgrade}
+                  disabled={userClub.budget < SCOUT_UPGRADE_COST[scouts.level + 1]}
+                  className="mt-3 w-full rounded-lg bg-teal-500 px-3 py-2 text-xs font-semibold text-pitch-950 hover:bg-teal-400 disabled:opacity-40"
+                >
+                  Potenzia al livello {scouts.level + 1} · {fmtMoney(SCOUT_UPGRADE_COST[scouts.level + 1])}
+                </button>
+              )}
+              <p className="mt-2 text-[10px] text-slate-500">
+                Ogni potenziamento rilegge la Primavera: le stime cambiano, la verità no.
+              </p>
+            </Card>
             <Card title={'Primavera (' + youth.length + ')'}>
               <ul className="space-y-1.5">
                 {youthRanked.map((p) => (
@@ -399,15 +441,15 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
                     <span className="w-8 shrink-0 text-right text-xs text-slate-400">{p.age}a</span>
                     <span
                       className="w-14 shrink-0 text-right text-xs text-teal-400"
-                      title="Stima del tuo staff: staff migliore, lettura più precisa"
+                      title="Stima dei tuoi osservatori: rete migliore, lettura più precisa"
                     >
-                      ~{scoutedPotential(p, staffLevel)}
+                      ~{scoutedPotential(p, scouts)}
                     </span>
                   </li>
                 ))}
               </ul>
               <p className="mt-3 text-xs text-slate-500">
-                Il potenziale dei giovani è una stima (~) del tuo staff: non tutti i giovani diventano campioni.
+                Il potenziale dei giovani è una stima (~) dei tuoi osservatori: non tutti i giovani diventano campioni.
               </p>
             </Card>
           </div>
@@ -470,7 +512,7 @@ export default function Dashboard({ careerId, onNewCareer, onSwitchCareer }) {
       {cardPlayer && (
         <PlayerCard
           player={cardPlayer}
-          staffLevel={staffLevel}
+          scouts={scouts}
           round={round}
           onClose={() => setCardPlayer(null)}
         />

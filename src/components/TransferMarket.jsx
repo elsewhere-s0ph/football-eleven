@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { askingPrice, respondToOffer, aiBidFor, boughtContract } from '../game/market'
 import { transferPlayer } from '../db'
+import { ABILITIES } from '../game/abilities'
 
 const ROLES = ['Tutti', 'GK', 'DF', 'MF', 'FW']
 const ROLE_BADGE = { GK: 'P', DF: 'D', MF: 'C', FW: 'A' }
@@ -332,6 +333,11 @@ export default function TransferMarket({ career, userClub, clubs, players, next,
 
             {mode === 'buy' ? (
               <div className="space-y-3">
+                {Array.isArray(sheet.abilities) && sheet.abilities.length > 0 ? (
+                  <p className="text-xs text-amber-300">
+                    Abilità: {sheet.abilities.map((id) => (ABILITIES[id] ? ABILITIES[id].name : id)).join(' · ')}
+                  </p>
+                ) : null}
                 <p className="text-sm text-pitch-300">
                   Prezzo richiesto: <span className="font-bold text-teal-300">{fmtMillions(askingById[sheet.id] || 0)}</span>
                   {' · '}Stipendio: {fmtMoney(sheet.wage || 0)}/stagione
